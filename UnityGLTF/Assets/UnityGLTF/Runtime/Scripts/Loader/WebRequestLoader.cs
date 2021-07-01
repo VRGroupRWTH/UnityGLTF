@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
+using System.Net.Http.Headers;
 #if WINDOWS_UWP
 using Windows.Web.Http;
 using Windows.Security;
@@ -17,14 +18,15 @@ namespace UnityGLTF.Loader
 {
 	public class WebRequestLoader : IDataLoader
 	{
-		private readonly HttpClient httpClient = new HttpClient();
+		private readonly HttpClient httpClient;
 		private readonly Uri baseAddress;
 
-		public WebRequestLoader(string rootUri)
+		public WebRequestLoader(string rootUri, NetworkCredential credentials = null)
 		{
 #if !WINDOWS_UWP
 			ServicePointManager.ServerCertificateValidationCallback = ValidateServerCertificate;
 #endif
+			httpClient = new HttpClient(new HttpClientHandler{Credentials = credentials});
 			baseAddress = new Uri(rootUri);
 		}
 
