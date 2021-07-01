@@ -9,7 +9,7 @@ namespace UnityGLTF
 	{
 		private Vector2 metalRoughOffset = new Vector2(0, 0);
 
-		public MetalRoughMap(int MaxLOD = 1000) : base("GLTF/PbrMetallicRoughness", MaxLOD) { }
+		public MetalRoughMap(int MaxLOD = 1000) : base("Universal Render Pipeline/Lit", MaxLOD) { }
 		public MetalRoughMap(string shaderName, int MaxLOD = 1000) : base(shaderName, MaxLOD) { }
 		protected MetalRoughMap(Material m, int MaxLOD = 1000) : base(m, MaxLOD) { }
 
