@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -19,9 +20,12 @@ namespace UnityGLTF
 		public bool UseStream = false;
 		public bool AppendStreamingAssets = true;
 		public bool PlayAnimationOnLoad = true;
-        public ImporterFactory Factory = null;
+        	public ImporterFactory Factory = null;
+		
+		[NonSerialized]
+		public NetworkCredential NetworkCredential;
 
-        public IEnumerable<Animation> Animations { get; private set; }
+        	public IEnumerable<Animation> Animations { get; private set; }
 
 		[SerializeField]
 		private bool loadOnStart = true;
@@ -100,7 +104,7 @@ namespace UnityGLTF
 				else
 				{
 					string directoryPath = URIHelper.GetDirectoryName(GLTFUri);
-					importOptions.DataLoader = new WebRequestLoader(directoryPath);
+					importOptions.DataLoader = new WebRequestLoader(directoryPath, NetworkCredential);
 
 					sceneImporter = Factory.CreateSceneImporter(
 						URIHelper.GetFileFromUri(new Uri(GLTFUri)),
