@@ -12,8 +12,8 @@ namespace UnityGLTF
 
 		public virtual Texture BaseColorTexture
 		{
-			get { return _material.GetTexture("_MainTex"); }
-			set { _material.SetTexture("_MainTex", value); }
+			get { return _material.GetTexture("_BaseMap"); }
+			set { _material.SetTexture("_BaseMap", value); }
 		}
 
 		// not implemented by the Standard shader
@@ -29,7 +29,7 @@ namespace UnityGLTF
 			set {
 				baseColorOffset = value;
 				var unitySpaceVec = new Vector2(baseColorOffset.x, 1 - BaseColorXScale.y - baseColorOffset.y);
-				_material.SetTextureOffset("_MainTex", unitySpaceVec);
+				_material.SetTextureOffset("_BaseMap", unitySpaceVec);
 			}
 		}
 
@@ -41,9 +41,9 @@ namespace UnityGLTF
 
 		public virtual Vector2 BaseColorXScale
 		{
-			get { return _material.GetTextureScale("_MainTex"); }
+			get { return _material.GetTextureScale("_BaseMap"); }
 			set {
-				_material.SetTextureScale("_MainTex", value);
+				_material.SetTextureScale("_BaseMap", value);
 				BaseColorXOffset = baseColorOffset;
 			}
 		}
@@ -56,8 +56,8 @@ namespace UnityGLTF
 
 		public virtual Color BaseColorFactor
 		{
-			get { return _material.GetColor("_Color"); }
-			set { _material.SetColor("_Color", value); }
+			get { return _material.GetColor("_BaseMap"); }
+			set { _material.SetColor("_BaseMap", value); }
 		}
 
 		public virtual Texture MetallicRoughnessTexture
