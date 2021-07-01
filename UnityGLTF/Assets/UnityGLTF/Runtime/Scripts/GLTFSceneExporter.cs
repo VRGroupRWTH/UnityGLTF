@@ -2284,7 +2284,7 @@ namespace UnityGLTF
 					sampler.MagFilter = MagFilterMode.Nearest;
 					break;
 				case FilterMode.Bilinear:
-					sampler.MinFilter = MinFilterMode.LinearMipmapNearest;
+					sampler.MinFilter = MinFilterMode.NearestMipmapLinear;
 					sampler.MagFilter = MagFilterMode.Linear;
 					break;
 				case FilterMode.Trilinear:
@@ -2819,10 +2819,10 @@ namespace UnityGLTF
 			for (var i = 0; i < root.Samplers.Count; i++)
 			{
 				bool filterIsNearest = root.Samplers[i].MinFilter == MinFilterMode.Nearest
-					|| root.Samplers[i].MinFilter == MinFilterMode.NearestMipmapNearest
-					|| root.Samplers[i].MinFilter == MinFilterMode.LinearMipmapNearest;
+					|| root.Samplers[i].MinFilter == MinFilterMode.NearestMipmapNearest;
 
 				bool filterIsLinear = root.Samplers[i].MinFilter == MinFilterMode.Linear
+					|| root.Samplers[i].MinFilter == MinFilterMode.LinearMipmapNearest
 					|| root.Samplers[i].MinFilter == MinFilterMode.NearestMipmapLinear;
 
 				bool filterMatched = textureObj.filterMode == FilterMode.Point && filterIsNearest
