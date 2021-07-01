@@ -8,7 +8,7 @@
     "precompiledReferences": [
         "GLTFSerialization.dll"
     ],
-    "autoReferenced": false,
+    "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": []
 }
