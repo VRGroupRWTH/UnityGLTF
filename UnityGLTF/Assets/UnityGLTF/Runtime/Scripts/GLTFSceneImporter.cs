@@ -759,11 +759,6 @@ namespace UnityGLTF
 		{
 			switch (image.MimeType)
 			{
-				case "image/png":
-				case "image/jpeg":
-					//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
-					texture.LoadImage(data, markGpuOnly);
-					break;
 				case "image/ktx2":
 #if HAVE_KTX
 						// TODO doesn't work yet, blocks?
@@ -779,6 +774,12 @@ namespace UnityGLTF
 					Debug.LogWarning("The KTX2 Texture Format (KHR_texture_basisu) isn't supported right now. The texture " + texture.name + " won't load and will be black. Try using glTFast instead.");
 					await Task.CompletedTask;
 #endif
+					break;
+				case "image/png":
+				case "image/jpeg":
+				default:
+					//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
+					texture.LoadImage(data, markGpuOnly);
 					break;
 			}
 		}
