@@ -325,6 +325,9 @@ namespace UnityGLTF
 
 				cancellationToken.ThrowIfCancellationRequested();
 
+				if (_gltfRoot.ExtensionsRequired != null && _gltfRoot.ExtensionsRequired.Contains("KHR_draco_mesh_compression"))
+					throw new NotSupportedException("Draco compression (using KHR_draco_mesh_compression) isn't currently supported. Use glTFast instead for loading meshes that use Draco compression.");
+
 				if (_assetCache == null)
 				{
 					_assetCache = new AssetCache(_gltfRoot);
@@ -751,6 +754,35 @@ namespace UnityGLTF
 			}
 		}
 
+
+		async Task CheckMimeTypeAndLoadImage(GLTFImage image, Texture2D texture, byte[] data, bool markGpuOnly)
+		{
+			switch (image.MimeType)
+			{
+				case "image/png":
+				case "image/jpeg":
+					//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
+					texture.LoadImage(data, markGpuOnly);
+					break;
+				case "image/ktx2":
+#if HAVE_KTX
+						// TODO doesn't work yet, blocks?
+						// var ktxTexture = new KtxUnity.KtxTexture();
+						// using(var alloc = new Unity.Collections.NativeArray<byte>(data, Unity.Collections.Allocator.Persistent))
+						// {
+						// 	var resultTextureData = await ktxTexture.LoadFromBytes(alloc, false);
+						// 	var tmp = texture;
+						// 	texture = resultTextureData.texture;
+						// 	texture.name = tmp.name;
+						// }
+#else
+					Debug.LogWarning("The KTX2 Texture Format (KHR_texture_basisu) isn't supported right now. The texture " + texture.name + " won't load and will be black. Try using glTFast instead.");
+					await Task.CompletedTask;
+#endif
+					break;
+			}
+		}
+
 		protected virtual async Task ConstructUnityTexture(Stream stream, bool markGpuOnly, bool isLinear, GLTFImage image, int imageCacheIndex)
 		{
 			Texture2D texture = new Texture2D(0, 0, TextureFormat.RGBA32, GenerateMipMapsForTextures, isLinear);
@@ -761,7 +793,7 @@ namespace UnityGLTF
 				using (MemoryStream memoryStream = stream as MemoryStream)
 				{
 					await YieldOnTimeoutAndThrowOnLowMemory();
-					texture.LoadImage(memoryStream.ToArray(), markGpuOnly);
+					await CheckMimeTypeAndLoadImage(image, texture, memoryStream.ToArray(), markGpuOnly);
 				}
 			}
 			else
@@ -776,8 +808,7 @@ namespace UnityGLTF
 				stream.Read(buffer, 0, (int)stream.Length);
 
 				await YieldOnTimeoutAndThrowOnLowMemory();
-				//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
-				texture.LoadImage(buffer, markGpuOnly);
+				await CheckMimeTypeAndLoadImage(image, texture, buffer, markGpuOnly);
 			}
 
 			Debug.Assert(_assetCache.ImageCache[imageCacheIndex] == null, "ImageCache should not be loaded multiple times");
@@ -2178,7 +2209,7 @@ namespace UnityGLTF
 
 		protected virtual int GetTextureSourceId(GLTFTexture texture)
 		{
-			return texture.Source.Id;
+			return texture.Source?.Id ?? 0;
 		}
 
 		/// <summary>
