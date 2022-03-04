@@ -162,3 +162,9 @@ TestProjects/*/*.csproj
 **/GLTFSerialization/.idea
 **/GLTFSerialization/bin~
 **/GLTFSerialization/obj~
+TestProjects/*/.idea
+TestProjects/*/Logs
+TestProjects/*/UserSettings
+TestProjects/*/.vsconfig
+TestProjects/*/Builds
+TestProjects/*/Assets/WSATestCertificate.pfx*

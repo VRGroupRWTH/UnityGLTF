@@ -4,6 +4,71 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.0.4-preview.34] - 2022-02-23
+- added Accessor reuse between exported animations when they come from the same AnimationClip/speed pair
+- added optional project setting to export animation clips with unique names (lots of viewers don't support that)
+- fixed animation clips being merged when the same clip was used in multiple Animators
+
+## [1.0.4-preview.33] - 2022-02-21
+- added export option to merge animator states with identical names into one animation
+- fixed export of multiple animations when they had the same name (was implicitly merged before, now explicit)
+- fixed export of multiple animations when they had the same animator state name but different speeds
+
+## [1.0.4-preview.32] - 2022-02-10
+- fixed compilation issues on older Unity versions
+- fixed exporting in memory to GLB byte array
+- fixed dependency to Timeline and some modules not being clear / not guarded
+- fixed Readme containing outdated install instructions
+- fixed compiler errors when building to some platforms
+
+## [1.0.4-preview.31] - 2022-02-08
+- added ability to record and export blend shapes at runtime
+- fixed settings not being loaded from Resources correctly at runtime
+- fixed another case of duplicate recorded keyframes
+
+## [1.0.4-preview.30] - 2022-02-08
+- added start events to recorder, made key methods virtual
+- fixed GLTF recorder component global shortcuts; now uses regular keycode during play mode
+
+## [1.0.4-preview.29] - 2022-02-07
+- added GLTFRecorderComponent to record at runtime
+- renamed recorder files to follow existing filenames
+- fixed compilation warning in GLTFSceneImporter
+- fixed: create export directory if it doesn't exist
+- fixed: blendshape export was missing flag to export no blendshapes at all
+- fixed: in some cases would attempt to record duplicate timestamps which is not allowed
+- fixed build error from GLTFSceneExporter
+
+## [1.0.4-preview.28] - 2022-02-07
+- added glTF Timeline exporter track that allows for both editor and runtime animation export
+- added ability to export RenderTextures instead of erroring out, these can be exported for a while now
+- added export callbacks and made an initial set of export methods public to enable custom export extensions (similar to three.js export callbacks)
+- added export generator name
+- fixed URP/Unlit color not being exported
+- fixed light intensity values being incorrect depending on Unity settings
+- fixed removeEmptyRootObjects on import not actually removing empty root objects
+- fixed warning when exporting texture transforms if _MainTex_ST is present but _MainTex isn't
+- fixed non-specific textures using the wrong export type in some cases, asking the AssetImporter now if one exists
+- changed menu items, export options are now in "Assets/UnityGltf/" instead of a toplevel "GLTF" menu
+
+## [1.0.4-preview.27] - 2021-12-02
+- fixed `_scaleFactor` not being applied to child transform positions for editor import
+- fixed roundtrip issues when exporting models that have been imported by UnityGLTF or glTFast
+- fixed metallicGlossMap being in the wrong color space on export if emission texture was also used
+- fixed light/occlusion map being in the wrong color space during roundtrip
+
+## [1.0.4-preview.26] - 2021-11-16
+- fixed objects with EditorOnly tag being exported, are skipped now
+
+## [1.0.4-preview.25] - 2021-11-12
+- fixed imported object names potentially not being unique
+- fixed normal map export format when build target is Android
+- fixed export of animations when multiple exported objects share the same animation name (gets merged on export now)
+- moved GLTF serialization from DLL to package to improve platform support (Unity will compile this for all platforms, no need for special DLLs)
+- added sparse accessor export for blendshape positions/normals
+- added ability to generate secondary UVs in UnityGLTF importer
+- added warning when trying to use KTX2 textures which is currently not supported
+
 ## [1.0.4-preview.24] - 2021-06-14
 - fix: don't attempt to export blendshape normals/tangents when mesh doesn't have them
 - fix: warn and skip null bones in SkinnedMeshRenderer export

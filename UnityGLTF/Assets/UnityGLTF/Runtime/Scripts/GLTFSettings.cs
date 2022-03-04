@@ -1,13 +1,17 @@
-﻿using System.Collections.Generic;
+﻿#if UNITY_EDITOR && UNITY_IMGUI
+#define SHOW_SETTINGS_EDITOR
+#endif
+
+using System.Collections.Generic;
 using UnityEngine;
-#if UNITY_EDITOR
 using System.IO;
+#if UNITY_EDITOR
 using UnityEditor;
 #endif
 
 namespace UnityGLTF
 {
-#if UNITY_EDITOR
+#if SHOW_SETTINGS_EDITOR
     internal class GltfSettingsProvider : SettingsProvider
     {
 	    private GLTFSettings settings;
@@ -59,7 +63,8 @@ namespace UnityGLTF
 	    [System.Flags]
 	    public enum BlendShapeExportPropertyFlags
 	    {
-		    PositionOnly = 0,
+		    None = 0,
+		    PositionOnly = 1,
 		    Normal = 2,
 		    Tangent = 4,
 		    All = ~0
@@ -91,6 +96,9 @@ namespace UnityGLTF
 		[SerializeField]
 		private bool exportAnimations = true;
 		[SerializeField]
+		[Tooltip("Some viewers can't distinguish between animation clips that have the same name. This option ensures all exported animation names are unique.")]
+		private bool uniqueAnimationNames = false;
+		[SerializeField]
 		private bool bakeSkinnedMeshes = false;
 		[Header("Export Mesh Data")]
 		[SerializeField]
@@ -106,9 +114,9 @@ namespace UnityGLTF
 			set {
 				if(exportNames != value) {
 					exportNames = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
 				}
 			}
 		}
@@ -118,9 +126,9 @@ namespace UnityGLTF
 			set {
 				if(exportFullPath != value) {
 					exportFullPath = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
 				}
 			}
 		}
@@ -142,9 +150,9 @@ namespace UnityGLTF
 			set {
 				if(requireExtensions != value) {
 					requireExtensions = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
 				}
 			}
 		}
@@ -154,9 +162,9 @@ namespace UnityGLTF
 			set {
 				if(tryExportTexturesFromDisk != value) {
 					tryExportTexturesFromDisk = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
 				}
 			}
 		}
@@ -214,9 +222,21 @@ namespace UnityGLTF
 			set {
 				if(exportAnimations != value) {
 					exportAnimations = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
+				}
+			}
+		}
+
+		public bool UniqueAnimationNames
+		{ get => uniqueAnimationNames;
+			set {
+				if(uniqueAnimationNames != value) {
+					uniqueAnimationNames = value;
+#if UNITY_EDITOR
+					EditorUtility.SetDirty(this);
+#endif
 				}
 			}
 		}
@@ -250,9 +270,9 @@ namespace UnityGLTF
 			set {
 				if(bakeSkinnedMeshes != value) {
 					bakeSkinnedMeshes = value;
-					#if UNITY_EDITOR
+#if UNITY_EDITOR
 					EditorUtility.SetDirty(this);
-					#endif
+#endif
 				}
 			}
 		}
@@ -272,7 +292,7 @@ namespace UnityGLTF
 			if (cachedSettings)
 				return cachedSettings;
 
-			var settings = Resources.Load<GLTFSettings>(k_SettingsFileName);
+			var settings = Resources.Load<GLTFSettings>(Path.GetFileNameWithoutExtension(k_SettingsFileName));
 #if UNITY_EDITOR
 			if(!settings)
 			{

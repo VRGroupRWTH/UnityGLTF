@@ -20,12 +20,14 @@ namespace UnityGLTF
 		public bool UseStream = false;
 		public bool AppendStreamingAssets = true;
 		public bool PlayAnimationOnLoad = true;
-        	public ImporterFactory Factory = null;
+        public ImporterFactory Factory = null;
 		
 		[NonSerialized]
 		public NetworkCredential NetworkCredential;
 
-        	public IEnumerable<Animation> Animations { get; private set; }
+#if UNITY_ANIMATION
+        public IEnumerable<Animation> Animations { get; private set; }
+#endif
 
 		[SerializeField]
 		private bool loadOnStart = true;
@@ -48,7 +50,7 @@ namespace UnityGLTF
 		private async void Start()
 		{
 			if (!loadOnStart) return;
-			
+
 			try
 			{
 				await Load();
@@ -146,12 +148,14 @@ namespace UnityGLTF
 				// print("model loaded with vertices: " + sceneImporter.Statistics.VertexCount.ToString() + ", triangles: " + sceneImporter.Statistics.TriangleCount.ToString());
 				LastLoadedScene = sceneImporter.LastLoadedScene;
 
+#if UNITY_ANIMATION
 				Animations = sceneImporter.LastLoadedScene.GetComponents<Animation>();
 
 				if (PlayAnimationOnLoad && Animations.Any())
 				{
 					Animations.FirstOrDefault().Play();
 				}
+#endif
 			}
 			finally
 			{
