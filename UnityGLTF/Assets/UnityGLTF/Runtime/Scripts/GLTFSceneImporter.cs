@@ -759,6 +759,11 @@ namespace UnityGLTF
 		{
 			switch (image.MimeType)
 			{
+				case "image/png":
+				case "image/jpeg":
+					//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
+					texture.LoadImage(data, markGpuOnly);
+					break;
 				case "image/ktx2":
 #if HAVE_KTX
 						// TODO doesn't work yet, blocks?
@@ -775,10 +780,7 @@ namespace UnityGLTF
 					await Task.CompletedTask;
 #endif
 					break;
-				case "image/png":
-				case "image/jpeg":
 				default:
-					//	NOTE: the second parameter of LoadImage() marks non-readable, but we can't mark it until after we call Apply()
 					texture.LoadImage(data, markGpuOnly);
 					break;
 			}
@@ -2027,6 +2029,7 @@ namespace UnityGLTF
 
 			mapper.Material.name = def.Name;
 			mapper.AlphaMode = def.AlphaMode;
+			mapper.AlphaCutoff = def.AlphaCutoff;
 			mapper.DoubleSided = def.DoubleSided;
 
 			var mrMapper = mapper as IMetalRoughUniformMap;
@@ -2308,7 +2311,7 @@ namespace UnityGLTF
 
 				var source = _assetCache.ImageCache[sourceId];
 				FilterMode desiredFilterMode;
-				TextureWrapMode desiredWrapMode;
+				TextureWrapMode desiredWrapModeS, desiredWrapModeT;
 
 				if (texture.Sampler != null)
 				{
@@ -2333,30 +2336,33 @@ namespace UnityGLTF
 							break;
 					}
 
-					switch (sampler.WrapS)
+					TextureWrapMode UnityWrapMode(GLTF.Schema.WrapMode gltfWrapMode)
 					{
-						case GLTF.Schema.WrapMode.ClampToEdge:
-							desiredWrapMode = TextureWrapMode.Clamp;
-							break;
-						case GLTF.Schema.WrapMode.Repeat:
-							desiredWrapMode = TextureWrapMode.Repeat;
-							break;
-						case GLTF.Schema.WrapMode.MirroredRepeat:
-							desiredWrapMode = TextureWrapMode.Mirror;
-							break;
-						default:
-							Debug.LogWarning("Unsupported Sampler.WrapS: " + sampler.WrapS);
-							desiredWrapMode = TextureWrapMode.Repeat;
-							break;
+						switch (gltfWrapMode)
+						{
+							case GLTF.Schema.WrapMode.ClampToEdge:
+								return TextureWrapMode.Clamp;
+							case GLTF.Schema.WrapMode.Repeat:
+								return TextureWrapMode.Repeat;
+							case GLTF.Schema.WrapMode.MirroredRepeat:
+								return TextureWrapMode.Mirror;
+							default:
+								Debug.LogWarning("Unsupported Sampler.Wrap: " + gltfWrapMode);
+								return TextureWrapMode.Repeat;
+						}
 					}
+
+					desiredWrapModeS = UnityWrapMode(sampler.WrapS);
+					desiredWrapModeT = UnityWrapMode(sampler.WrapT);
 				}
 				else
 				{
 					desiredFilterMode = FilterMode.Trilinear;
-					desiredWrapMode = TextureWrapMode.Repeat;
+					desiredWrapModeS = TextureWrapMode.Repeat;
+					desiredWrapModeT = TextureWrapMode.Repeat;
 				}
 
-				var matchSamplerState = source.filterMode == desiredFilterMode && source.wrapMode == desiredWrapMode;
+				var matchSamplerState = source.filterMode == desiredFilterMode && source.wrapModeU == desiredWrapModeS && source.wrapModeV == desiredWrapModeT;
 				if (matchSamplerState || markGpuOnly)
 				{
 					Debug.Assert(_assetCache.TextureCache[textureIndex].Texture == null, "Texture should not be reset to prevent memory leaks");
@@ -2364,7 +2370,7 @@ namespace UnityGLTF
 
 					if (!matchSamplerState)
 					{
-						Debug.LogWarning($"Ignoring sampler; filter mode: source {source.filterMode}, desired {desiredFilterMode}; wrap mode: source {source.wrapMode}, desired {desiredWrapMode}");
+						Debug.LogWarning($"Ignoring sampler; filter mode: source {source.filterMode}, desired {desiredFilterMode}; wrap mode: source {source.wrapModeU}x{source.wrapModeV}, desired {desiredWrapModeS}x{desiredWrapModeT}");
 					}
 				}
 				else
@@ -2372,7 +2378,8 @@ namespace UnityGLTF
 					var unityTexture = Object.Instantiate(source);
 					unityTexture.name = string.IsNullOrEmpty(image.Name) ? Path.GetFileNameWithoutExtension(image.Uri) : image.Name;
 					unityTexture.filterMode = desiredFilterMode;
-					unityTexture.wrapMode = desiredWrapMode;
+					unityTexture.wrapModeU = desiredWrapModeS;
+					unityTexture.wrapModeV = desiredWrapModeT;
 
 					Debug.Assert(_assetCache.TextureCache[textureIndex].Texture == null, "Texture should not be reset to prevent memory leaks");
 					_assetCache.TextureCache[textureIndex].Texture = unityTexture;

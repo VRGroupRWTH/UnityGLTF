@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using GLTF;
@@ -96,6 +97,8 @@ namespace UnityGLTF
 			public Texture2D texture;
 			public TextureMapType textureMapType;
 		}
+
+		public IReadOnlyList<Transform> RootTransforms => _rootTransforms;
 
 		private Transform[] _rootTransforms;
 		private GLTFRoot _root;
@@ -287,7 +290,7 @@ namespace UnityGLTF
 				Asset = new Asset
 				{
 					Version = "2.0",
-					Generator = "UnityGLTF (prefrontal cortex' fork)"
+					Generator = "UnityGLTF"
 				},
 				Buffers = new List<GLTFBuffer>(),
 				BufferViews = new List<BufferView>(),
@@ -381,15 +384,17 @@ namespace UnityGLTF
 			BeforeSceneExport?.Invoke(this, _root);
 
 			_root.Scene = ExportScene(sceneName, _rootTransforms);
+
 			if (ExportAnimations)
 			{
 				ExportAnimation();
-				// Export skins
-				for (int i = 0; i < _skinnedNodes.Count; ++i)
-				{
-					Transform t = _skinnedNodes[i];
-					ExportSkinFromNode(t);
-				}
+			}
+
+			// Export skins
+			for (int i = 0; i < _skinnedNodes.Count; ++i)
+			{
+				Transform t = _skinnedNodes[i];
+				ExportSkinFromNode(t);
 			}
 
 			_exportOptions.AfterSceneExport?.Invoke(this, _root);
@@ -503,17 +508,19 @@ namespace UnityGLTF
 			// 	t.rotation *= Quaternion.Euler(0,180,0);
 
 			_root.Scene = ExportScene(fileName, _rootTransforms);
+
 			if (ExportAnimations)
 			{
 				ExportAnimation();
-				// Export skins
-				for (int i = 0; i < _skinnedNodes.Count; ++i)
-				{
-					Transform t = _skinnedNodes[i];
-					ExportSkinFromNode(t);
+			}
 
-					// updateProgress(EXPORT_STEP.SKINNING, i, _skinnedNodes.Count);
-				}
+			// Export skins
+			for (int i = 0; i < _skinnedNodes.Count; ++i)
+			{
+				Transform t = _skinnedNodes[i];
+				ExportSkinFromNode(t);
+
+				// updateProgress(EXPORT_STEP.SKINNING, i, _skinnedNodes.Count);
 			}
 
 			if (_exportOptions.AfterSceneExport != null)
@@ -1105,7 +1112,6 @@ namespace UnityGLTF
 		}
 		private void ExportAnimation()
 		{
-
 			for (int i = 0; i < _animatedNodes.Count; ++i)
 			{
 				Transform t = _animatedNodes[i];
@@ -1184,27 +1190,72 @@ namespace UnityGLTF
 			return null;
 		}
 
+#if UNITY_EDITOR
+		private const string MakeMeshReadableDialogueDecisionKey = nameof(MakeMeshReadableDialogueDecisionKey);
+		private static PropertyInfo canAccessProperty =
+			typeof(Mesh).GetProperty("canAccess", BindingFlags.Instance | BindingFlags.Default | BindingFlags.NonPublic);
+#endif
+
+		private static bool MeshIsReadable(Mesh mesh)
+		{
+#if UNITY_EDITOR
+			return mesh.isReadable || (bool) (canAccessProperty?.GetMethod?.Invoke(mesh, null) ?? true);
+#else
+			return mesh.isReadable;
+#endif
+		}
+
 		// a mesh *might* decode to multiple prims if there are submeshes
 		private MeshPrimitive[] ExportPrimitive(GameObject gameObject, GLTFMesh mesh)
 		{
 			Mesh meshObj = null;
 			SkinnedMeshRenderer smr = null;
 			var filter = gameObject.GetComponent<MeshFilter>();
-			if (filter != null)
+			if (filter)
 			{
 				meshObj = filter.sharedMesh;
 			}
 			else
 			{
 				smr = gameObject.GetComponent<SkinnedMeshRenderer>();
-				meshObj = smr.sharedMesh;
+				if (smr)
+				{
+					meshObj = smr.sharedMesh;
+				}
 			}
-			if (meshObj == null)
+			if (!meshObj)
 			{
-				Debug.LogWarning(string.Format("MeshFilter.sharedMesh on gameobject:{0} is missing, skipping", gameObject.name), gameObject);
+				Debug.LogWarning($"MeshFilter.sharedMesh on GameObject:{gameObject.name} is missing, skipping", gameObject);
 				return null;
 			}
 
+#if UNITY_EDITOR
+			if (!MeshIsReadable(meshObj))
+			{
+#if UNITY_2019_3_OR_NEWER
+				if(EditorUtility.DisplayDialog("Exporting mesh but mesh is not readable",
+					   $"The mesh {meshObj.name} is not readable. Do you want to change its import settings and make it readable now?",
+					   "Make it readable", "No, skip mesh",
+					   DialogOptOutDecisionType.ForThisSession, MakeMeshReadableDialogueDecisionKey))
+#endif
+				{
+					var path = AssetDatabase.GetAssetPath(meshObj);
+					var importer = AssetImporter.GetAtPath(path) as ModelImporter;
+					if (importer)
+					{
+						importer.isReadable = true;
+						importer.SaveAndReimport();
+					}
+				}
+#if UNITY_2019_3_OR_NEWER
+				else
+				{
+					Debug.LogWarning($"The mesh {meshObj.name} is not readable. Skipping");
+					return null;
+				}
+#endif
+			}
+#endif
 			var renderer = gameObject.GetComponent<MeshRenderer>();
 			if (!renderer) smr = gameObject.GetComponent<SkinnedMeshRenderer>();
 
@@ -1393,10 +1444,15 @@ namespace UnityGLTF
 		        Root = _root
 	        };
 	        _root.Materials.Add(material);
+
+	        // after material export
+	        _exportOptions.AfterMaterialExport?.Invoke(this, _root, materialObj, material);
+	        AfterMaterialExport?.Invoke(this, _root, materialObj, material);
+
 	        return id;
         }
 
-        private MaterialId ExportMaterial(Material materialObj)
+        public MaterialId ExportMaterial(Material materialObj)
 		{
             //TODO if material is null
 			MaterialId id = GetMaterialId(_root, materialObj);
@@ -1472,7 +1528,18 @@ namespace UnityGLTF
 				if (materialObj.HasProperty("_EmissionColor"))
 				{
 					var c = materialObj.GetColor("_EmissionColor");
-					material.EmissiveFactor = c.ToNumericsColorLinear();
+					var emissiveAmount = c.ToNumericsColorLinear();
+					var maxEmissiveAmount = Mathf.Max(emissiveAmount.R, emissiveAmount.G, emissiveAmount.B);
+					if (maxEmissiveAmount > 1)
+					{
+						emissiveAmount.R /= maxEmissiveAmount;
+						emissiveAmount.G /= maxEmissiveAmount;
+						emissiveAmount.B /= maxEmissiveAmount;
+					}
+					emissiveAmount.A = Mathf.Clamp01(emissiveAmount.A);
+					material.EmissiveFactor = emissiveAmount;
+					material.AddExtension(KHR_materials_emissive_strength_Factory.EXTENSION_NAME, new KHR_materials_emissive_strength() { emissiveStrength = maxEmissiveAmount });
+					DeclareExtensionUsage(KHR_materials_emissive_strength_Factory.EXTENSION_NAME, false);
 				}
 
 				if (materialObj.HasProperty("_EmissionMap"))
@@ -1603,10 +1670,6 @@ namespace UnityGLTF
                 }
                 material.DoubleSided = true;
             }
-
-			// after material export
-			_exportOptions.AfterMaterialExport?.Invoke(this, _root, materialObj, material);
-			AfterMaterialExport?.Invoke(this, _root, materialObj, material);
 
 			return CreateAndAddMaterialId(materialObj, material);
 		}
@@ -1913,7 +1976,7 @@ namespace UnityGLTF
 				// legacy workaround: the UnityGLTF shaders misuse "_Glossiness" as roughness but don't have a keyword for it.
 				if (isGltfPbrMetallicRoughnessShader)
 					smoothness = 1 - smoothness;
-				pbr.RoughnessFactor = (metallicGlossMap && material.HasProperty("_GlossMapScale")) ? material.GetFloat("_GlossMapScale") : 1.0 - smoothness;
+				pbr.RoughnessFactor = (metallicGlossMap && material.HasProperty("_GlossMapScale")) ? (1 - material.GetFloat("_GlossMapScale")) : (1.0 - smoothness);
 			}
 
 			if (material.HasProperty("_MetallicGlossMap"))
@@ -2139,7 +2202,7 @@ namespace UnityGLTF
 			return constant;
 		}
 
-		private TextureInfo ExportTextureInfo(Texture texture, TextureMapType textureMapType)
+		public TextureInfo ExportTextureInfo(Texture texture, TextureMapType textureMapType)
 		{
 			var info = new TextureInfo();
 
@@ -3360,7 +3423,7 @@ namespace UnityGLTF
                 AnimationClip[] clips = AnimationUtility.GetAnimationClips(transform.gameObject);
                 var animatorController = animator.runtimeAnimatorController as AnimatorController;
 				// Debug.Log("animator: " + animator + "=> " + animatorController);
-                ExportAnimationClips(transform, clips, animatorController);
+                ExportAnimationClips(transform, clips, animator, animatorController);
 #endif
 			}
 
@@ -3373,118 +3436,118 @@ namespace UnityGLTF
 #endif
 			}
 
-#if ANIMATION_EXPORT_SUPPORTED
-			IEnumerable<AnimatorState> GetAnimatorStateParametersForClip(AnimationClip clip, AnimatorController animatorController)
-			{
-				if (!clip)
-					yield break;
 
-				if (!animatorController)
-					yield return new AnimatorState() { name = clip.name, speed = 1f };
 
-				foreach (var layer in animatorController.layers)
-				{
-					foreach (var state in layer.stateMachine.states)
-					{
-						// find a matching clip in the animator
-						if (state.state.motion is AnimationClip c && c == clip)
-						{
-							yield return state.state;
-						}
-					}
-				}
-			}
-
-			GLTFAnimation GetOrCreateAnimation(AnimationClip clip, string searchForDuplicateName, float speed)
-			{
-				var existingAnim = default(GLTFAnimation);
-				if (_exportOptions.MergeClipsWithMatchingNames)
-				{
-					// Check if we already exported an animation with exactly that name. If yes, we want to append to the previous one instead of making a new one.
-					// This allows to merge multiple animations into one if required (e.g. a character and an instrument that should play at the same time but have individual clips).
-					existingAnim = _root.Animations?.FirstOrDefault(x => x.Name == searchForDuplicateName);
-				}
-
-				// TODO when multiple AnimationClips are exported, we're currently not properly merging those;
-				// we should only export the GLTFAnimation once but then apply that to all nodes that require it (duplicating the animation but not the accessors)
-				// instead of naively writing over the GLTFAnimation with the same data.
-				var animationClipAndSpeed = (clip, speed);
-				if (existingAnim == null)
-				{
-					if(_clipToAnimation.TryGetValue(animationClipAndSpeed, out existingAnim))
-					{
-						// we duplicate the clip it was exported before so we can retarget to another transform.
-						existingAnim = new GLTFAnimation(existingAnim, _root);
-					}
-				}
-
-				GLTFAnimation anim = existingAnim != null ? existingAnim : new GLTFAnimation();
-
-				// add to set of already exported clip-state pairs
-				if (!_clipToAnimation.ContainsKey(animationClipAndSpeed))
-					_clipToAnimation.Add(animationClipAndSpeed, anim);
-
-				return anim;
-			}
-
-			// Creates GLTFAnimation for each clip and adds it to the _root
-			void ExportAnimationClips(Transform nodeTransform, AnimationClip[] clips, AnimatorController animatorController = null)
-			{
-				// Debug.Log("exporting clips from " + nodeTransform + " with " + animatorController);
-				if (animatorController)
-				{
-					for (int i = 0; i < clips.Length; i++)
-					{
-						if (!clips[i]) continue;
-
-						// special case: there could be multiple states with the same animation clip.
-						// if we want to handle this here, we need to find all states that match this clip
-						foreach(var state in GetAnimatorStateParametersForClip(clips[i], animatorController))
-						{
-							var speed = state.speed * (state.speedParameterActive ? animator.GetFloat(state.speedParameter) : 1f);
-							GLTFAnimation anim = GetOrCreateAnimation(clips[i], state.name, speed);
-
-							anim.Name = state.name;
-							if(settings.UniqueAnimationNames)
-								anim.Name = ObjectNames.GetUniqueName(_root.Animations.Select(x => x.Name).ToArray(), anim.Name);
-
-							ConvertClipToGLTFAnimation(ref clips[i], ref nodeTransform, ref anim, speed);
-
-							if (anim.Channels.Count > 0 && anim.Samplers.Count > 0 && !_root.Animations.Contains(anim))
-							{
-								_root.Animations.Add(anim);
-							}
-						}
-					}
-				}
-				else
-				{
-					for (int i = 0; i < clips.Length; i++)
-					{
-						if (!clips[i]) continue;
-
-						var speed = 1f;
-						GLTFAnimation anim = GetOrCreateAnimation(clips[i], clips[i].name, speed);
-
-						anim.Name = clips[i].name;
-						if(settings.UniqueAnimationNames)
-							anim.Name = ObjectNames.GetUniqueName(_root.Animations.Select(x => x.Name).ToArray(), anim.Name);
-
-						ConvertClipToGLTFAnimation(ref clips[i], ref nodeTransform, ref anim, speed);
-
-						if (anim.Channels.Count > 0 && anim.Samplers.Count > 0 && !_root.Animations.Contains(anim))
-						{
-							_root.Animations.Add(anim);
-						}
-					}
-				}
-			}
-#endif
 #endif
 		}
 
-#if UNITY_ANIMATION
+#if ANIMATION_EXPORT_SUPPORTED
+		private IEnumerable<AnimatorState> GetAnimatorStateParametersForClip(AnimationClip clip, AnimatorController animatorController)
+		{
+			if (!clip)
+				yield break;
 
+			if (!animatorController)
+				yield return new AnimatorState() { name = clip.name, speed = 1f };
+
+			foreach (var layer in animatorController.layers)
+			{
+				foreach (var state in layer.stateMachine.states)
+				{
+					// find a matching clip in the animator
+					if (state.state.motion is AnimationClip c && c == clip)
+					{
+						yield return state.state;
+					}
+				}
+			}
+		}
+
+		private GLTFAnimation GetOrCreateAnimation(AnimationClip clip, string searchForDuplicateName, float speed)
+		{
+			var existingAnim = default(GLTFAnimation);
+			if (_exportOptions.MergeClipsWithMatchingNames)
+			{
+				// Check if we already exported an animation with exactly that name. If yes, we want to append to the previous one instead of making a new one.
+				// This allows to merge multiple animations into one if required (e.g. a character and an instrument that should play at the same time but have individual clips).
+				existingAnim = _root.Animations?.FirstOrDefault(x => x.Name == searchForDuplicateName);
+			}
+
+			// TODO when multiple AnimationClips are exported, we're currently not properly merging those;
+			// we should only export the GLTFAnimation once but then apply that to all nodes that require it (duplicating the animation but not the accessors)
+			// instead of naively writing over the GLTFAnimation with the same data.
+			var animationClipAndSpeed = (clip, speed);
+			if (existingAnim == null)
+			{
+				if(_clipToAnimation.TryGetValue(animationClipAndSpeed, out existingAnim))
+				{
+					// we duplicate the clip it was exported before so we can retarget to another transform.
+					existingAnim = new GLTFAnimation(existingAnim, _root);
+				}
+			}
+
+			GLTFAnimation anim = existingAnim != null ? existingAnim : new GLTFAnimation();
+
+			// add to set of already exported clip-state pairs
+			if (!_clipToAnimation.ContainsKey(animationClipAndSpeed))
+				_clipToAnimation.Add(animationClipAndSpeed, anim);
+
+			return anim;
+		}
+
+		// Creates GLTFAnimation for each clip and adds it to the _root
+		public void ExportAnimationClips(Transform nodeTransform, IList<AnimationClip> clips,
+			Animator animator = null, AnimatorController animatorController = null)
+		{
+			// Debug.Log("exporting clips from " + nodeTransform + " with " + animatorController);
+			if (animatorController)
+			{
+				if (!animator) throw new ArgumentNullException("Missing " + nameof(animator));
+				for (int i = 0; i < clips.Count; i++)
+				{
+					if (!clips[i]) continue;
+
+					// special case: there could be multiple states with the same animation clip.
+					// if we want to handle this here, we need to find all states that match this clip
+					foreach(var state in GetAnimatorStateParametersForClip(clips[i], animatorController))
+					{
+						var speed = state.speed * (state.speedParameterActive ? animator.GetFloat(state.speedParameter) : 1f);
+						var name = clips[i].name;
+						ExportAnimationClip(clips[i], name, nodeTransform, speed);
+					}
+				}
+			}
+			else
+			{
+				for (int i = 0; i < clips.Count; i++)
+				{
+					if (!clips[i]) continue;
+					var speed = 1f;
+					ExportAnimationClip(clips[i], clips[i].name, nodeTransform, speed);
+				}
+			}
+		}
+
+		public GLTFAnimation ExportAnimationClip(AnimationClip clip, string name, Transform node, float speed)
+		{
+			if (!clip) return null;
+			GLTFAnimation anim = GetOrCreateAnimation(clip, name, speed);
+
+			anim.Name = name;
+			if(settings.UniqueAnimationNames)
+				anim.Name = ObjectNames.GetUniqueName(_root.Animations.Select(x => x.Name).ToArray(), anim.Name);
+
+			ConvertClipToGLTFAnimation(clip, node, anim, speed);
+
+			if (anim.Channels.Count > 0 && anim.Samplers.Count > 0 && !_root.Animations.Contains(anim))
+			{
+				_root.Animations.Add(anim);
+			}
+			return anim;
+		}
+#endif
+
+#if UNITY_ANIMATION
 		public enum AnimationKeyRotationType
 		{
 			Unknown,
@@ -3509,7 +3572,7 @@ namespace UnityGLTF
 			}
 		}
 
-		private void ConvertClipToGLTFAnimation(ref AnimationClip clip, ref Transform transform, ref GLTF.Schema.GLTFAnimation animation, float speed)
+		private void ConvertClipToGLTFAnimation(AnimationClip clip, Transform transform, GLTFAnimation animation, float speed)
 		{
 			// Generate GLTF.Schema.AnimationChannel and GLTF.Schema.AnimationSampler
 			// 1 channel per node T/R/S, one sampler per node T/R/S
@@ -3523,7 +3586,7 @@ namespace UnityGLTF
 			// where endTime is clip duration
 			// Note: we should avoid creating curves for a property if none of it's components is animated
 
-			GenerateMissingCurves(clip.length, ref transform, ref targetCurvesBinding);
+			GenerateMissingCurves(clip.length, transform, ref targetCurvesBinding);
 
 			if (BakeAnimationData)
 			{
@@ -3600,14 +3663,14 @@ namespace UnityGLTF
 					var speedMultiplier = Mathf.Clamp(speed, 0.01f, Mathf.Infinity);
 					if (!BakeCurveSet(targetCurvesBinding[target], clip.length, AnimationBakingFramerate, speedMultiplier, ref times, ref positions, ref rotations, ref scales, ref weights))
 					{
-						Debug.LogWarning("Warning: Export failed for animation curve " + target + " in " + clip + " from " + transform, transform);
+						Debug.LogWarning("Warning: Animation curves for " + target + " in " + clip + " from " + transform, transform);
 					}
 
 					bool haveAnimation = positions != null || rotations != null || scales != null || weights != null;
 
 					if(haveAnimation)
 					{
-						AddAnimationData(targetTr, ref animation, times, positions, rotations, scales, weights);
+						AddAnimationData(targetTr, animation, times, positions, rotations, scales, weights);
 					}
 				}
 			}
@@ -3620,9 +3683,19 @@ namespace UnityGLTF
 		private void CollectClipCurves(AnimationClip clip, ref Dictionary<string, TargetCurveSet> targetCurves)
 		{
 #if UNITY_EDITOR
+
 			foreach (var binding in UnityEditor.AnimationUtility.GetCurveBindings(clip))
 			{
 				AnimationCurve curve = UnityEditor.AnimationUtility.GetEditorCurve(clip, binding);
+
+				var containsPosition = binding.propertyName.Contains("m_LocalPosition");
+				var containsScale = binding.propertyName.Contains("m_LocalScale");
+				var containsRotation = binding.propertyName.ToLowerInvariant().Contains("localrotation");
+				var containsEuler = binding.propertyName.ToLowerInvariant().Contains("localeuler");
+				var containsBlendShapeWeight = binding.propertyName.StartsWith("blendShape.", StringComparison.Ordinal);
+				var containsCompatibleData = containsPosition || containsScale || containsRotation || containsEuler || containsBlendShapeWeight;
+
+				if (!containsCompatibleData) continue;
 
 				if (!targetCurves.ContainsKey(binding.path))
 				{
@@ -3632,7 +3705,7 @@ namespace UnityGLTF
 				}
 
 				TargetCurveSet current = targetCurves[binding.path];
-				if (binding.propertyName.Contains("m_LocalPosition"))
+				if (containsPosition)
 				{
 					if (binding.propertyName.Contains(".x"))
 						current.translationCurves[0] = curve;
@@ -3641,7 +3714,7 @@ namespace UnityGLTF
 					else if (binding.propertyName.Contains(".z"))
 						current.translationCurves[2] = curve;
 				}
-				else if (binding.propertyName.Contains("m_LocalScale"))
+				else if (containsScale)
 				{
 					if (binding.propertyName.Contains(".x"))
 						current.scaleCurves[0] = curve;
@@ -3650,7 +3723,7 @@ namespace UnityGLTF
 					else if (binding.propertyName.Contains(".z"))
 						current.scaleCurves[2] = curve;
 				}
-				else if (binding.propertyName.ToLower().Contains("localrotation"))
+				else if (containsRotation)
 				{
 					current.rotationType = AnimationKeyRotationType.Quaternion;
 					if (binding.propertyName.Contains(".x"))
@@ -3663,7 +3736,7 @@ namespace UnityGLTF
 						current.rotationCurves[3] = curve;
 				}
 				// Takes into account 'localEuler', 'localEulerAnglesBaked' and 'localEulerAnglesRaw'
-				else if (binding.propertyName.ToLower().Contains("localeuler"))
+				else if (containsEuler)
 				{
 					current.rotationType = AnimationKeyRotationType.Euler;
 					if (binding.propertyName.Contains(".x"))
@@ -3673,7 +3746,8 @@ namespace UnityGLTF
 					else if (binding.propertyName.Contains(".z"))
 						current.rotationCurves[2] = curve;
 				}
-				else if (binding.propertyName.StartsWith("blendShape."))
+				// ReSharper disable once ConditionIsAlwaysTrueOrFalse
+				else if (containsBlendShapeWeight)
 				{
 					var weightName = binding.propertyName.Substring("blendShape.".Length);
 					current.weightCurves.Add(weightName, curve);
@@ -3683,7 +3757,7 @@ namespace UnityGLTF
 #endif
 		}
 
-		private void GenerateMissingCurves(float endTime, ref Transform tr, ref Dictionary<string, TargetCurveSet> targetCurvesBinding)
+		private void GenerateMissingCurves(float endTime, Transform tr, ref Dictionary<string, TargetCurveSet> targetCurvesBinding)
 		{
 			var keyList = targetCurvesBinding.Keys.ToList();
 			foreach (string target in keyList)
@@ -3700,18 +3774,18 @@ namespace UnityGLTF
 					var renderer = targetTr.GetComponent<SkinnedMeshRenderer>();
 					var mesh = renderer.sharedMesh;
 					var shapeCount = mesh.blendShapeCount;
-					if(shapeCount != current.weightCurves.Count)
-					{
-						var newWeights = new Dictionary<string, AnimationCurve>();
-						for (int i = 0; i < shapeCount; i++)
-						{
-							var shapeName = mesh.GetBlendShapeName(i);
-							var shapeCurve = current.weightCurves.ContainsKey(shapeName) ? current.weightCurves[shapeName] : CreateConstantCurve(renderer.GetBlendShapeWeight(i), endTime);
-							newWeights.Add(shapeName, shapeCurve);
-						}
 
-						current.weightCurves = newWeights;
+					// need to reorder weights: Unity stores the weights alphabetically in the AnimationClip,
+					// not in the order of the weights.
+					var newWeights = new Dictionary<string, AnimationCurve>();
+					for (int i = 0; i < shapeCount; i++)
+					{
+						var shapeName = mesh.GetBlendShapeName(i);
+						var shapeCurve = current.weightCurves.ContainsKey(shapeName) ? current.weightCurves[shapeName] : CreateConstantCurve(renderer.GetBlendShapeWeight(i), endTime);
+						newWeights.Add(shapeName, shapeCurve);
 					}
+
+					current.weightCurves = newWeights;
 				}
 
 				targetCurvesBinding[target] = current;
@@ -3774,7 +3848,6 @@ namespace UnityGLTF
 
 			if(!haveTranslationKeys && !haveRotationKeys && !haveScaleKeys && !haveWeightKeys)
 			{
-				Debug.LogWarning("No keys in curve set");
 				return false;
 			}
 
@@ -3819,7 +3892,7 @@ namespace UnityGLTF
 					var curveArray = curveSet.weightCurves.Values.ToArray();
 					for(int j = 0; j < weightCount; j++)
 					{
-						weights[i * weightCount + j] = curveArray[j].Evaluate(times[i]) * 0.01f; // glTF weights 0..1 match to Unity weights 0..100
+						weights[i * weightCount + j] = curveArray[j].Evaluate(times[i]);
 					}
 				}
 			}
@@ -3847,7 +3920,7 @@ namespace UnityGLTF
 
 		public void AddAnimationData(
 			Transform target,
-			ref GLTF.Schema.GLTFAnimation animation,
+			GLTF.Schema.GLTFAnimation animation,
 			float[] times = null,
 			Vector3[] positions = null,
 			Vector4[] rotations = null,
@@ -3949,6 +4022,37 @@ namespace UnityGLTF
 
 			if (weights != null && weights.Length > 0)
 			{
+				// scale weights correctly if there are any
+				var skinnedMesh = target.GetComponent<SkinnedMeshRenderer>();
+				if (skinnedMesh)
+				{
+					// this code is adapted from SkinnedMeshRendererEditor (which calculates the right range for sliders to show)
+					// instead of calculating per blend shape, we're assuming all blendshapes have the same min/max here though.
+					var minBlendShapeFrameWeight = 0.0f;
+					var maxBlendShapeFrameWeight = 0.0f;
+
+					var sharedMesh = skinnedMesh.sharedMesh;
+					var shapeCount = sharedMesh.blendShapeCount;
+					for (int index = 0; index < shapeCount; ++index)
+					{
+						var blendShapeFrameCount = sharedMesh.GetBlendShapeFrameCount(index);
+						for (var frameIndex = 0; frameIndex < blendShapeFrameCount; ++frameIndex)
+						{
+							var shapeFrameWeight = sharedMesh.GetBlendShapeFrameWeight(index, frameIndex);
+							minBlendShapeFrameWeight = Mathf.Min(shapeFrameWeight, minBlendShapeFrameWeight);
+							maxBlendShapeFrameWeight = Mathf.Max(shapeFrameWeight, maxBlendShapeFrameWeight);
+						}
+					}
+
+					// Debug.Log($"min: {minBlendShapeFrameWeight}, max: {maxBlendShapeFrameWeight}");
+					// glTF weights 0..1 match to Unity weights 0..100, but Unity weights can be in arbitrary ranges
+					if (maxBlendShapeFrameWeight > 0)
+					{
+						for (int i = 0; i < weights.Length; i++)
+							weights[i] *= 1 / maxBlendShapeFrameWeight;
+					}
+				}
+
 				AnimationChannel Wchannel = new AnimationChannel();
 				AnimationChannelTarget WchannelTarget = new AnimationChannelTarget();
 				WchannelTarget.Path = GLTFAnimationChannelPath.weights;

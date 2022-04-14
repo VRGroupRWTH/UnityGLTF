@@ -23,8 +23,8 @@ namespace UnityGLTF.Timeline
 
 	        Time.captureFramerate = Clip.m_CaptureFrameRate;
 
-	        recorder = new GLTFRecorder(getExportRoot, Clip.m_RecordBlendShapes);
-	        recorder.StartRecording(getTime);
+	        // will be initialized lazy to ensure that the first frame is correct and not pre-timeline refresh
+	        recorder = null;
 	    }
 
 	    private void StopRecording(double getTime)
@@ -34,8 +34,15 @@ namespace UnityGLTF.Timeline
 
 	    private void ProcessRecording(double getTime, Transform getExportRoot)
 	    {
-		    if(getTime > recorder.LastRecordedTime)
-				recorder?.UpdateRecording(getTime);
+		    if (recorder == null)
+		    {
+			    recorder = new GLTFRecorder(getExportRoot, Clip.m_RecordBlendShapes);
+			    recorder.StartRecording(getTime);
+		    }
+		    else if (getTime > recorder.LastRecordedTime)
+		    {
+			    recorder?.UpdateRecording(getTime);
+		    }
 	    }
 
 	    public GLTFRecorderClip Clip;
@@ -87,9 +94,8 @@ namespace UnityGLTF.Timeline
 	            return;
 	        }
 
-	        // TODO move this to end of frame
-	        // UsdWaitForEndOfFrame.Add(() => OnFrameEnd(playable, info, playerData));
-	        OnFrameEnd(playable, info, playerData);
+	        double time = playable.GetTime();
+	        GLTFRecorderHelper.Add(() => OnFrameEnd(time, playable, info, playerData));
 	    }
 
 	    public override void OnBehaviourPlay(Playable playable, FrameData info)
@@ -102,7 +108,7 @@ namespace UnityGLTF.Timeline
 	        m_isPaused = true;
 	    }
 
-	    public void OnFrameEnd(Playable playable, FrameData info, object playerData)
+	    public void OnFrameEnd(double time, Playable playable, FrameData info, object playerData)
 	    {
 	        if (!playable.IsValid())
 	        {
@@ -115,7 +121,7 @@ namespace UnityGLTF.Timeline
 	            return;
 	        }
 
-	        ProcessRecording(playable.GetTime(), root);
+	        ProcessRecording(time, root);
 	    }
 	}
 }

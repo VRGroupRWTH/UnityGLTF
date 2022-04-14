@@ -125,7 +125,10 @@ namespace UnityGLTF.Timeline
 			// log
 			Debug.Log("Gltf Recording saved. Tracks: " + data.Count + ", Keys: " + data.First().Value.keys.Count + ",\nTotal Keys: " + data.Sum(x => x.Value.keys.Count));
 
+			var previousExportDisabledState = GLTFSceneExporter.ExportDisabledGameObjects;
+			var previousExportAnimationState = GLTFSceneExporter.ExportAnimations;
 			GLTFSceneExporter.ExportDisabledGameObjects = true;
+			GLTFSceneExporter.ExportAnimations = false;
 
 			var exporter = new GLTFSceneExporter(new Transform[] { root }, new ExportOptions()
 			{
@@ -135,6 +138,9 @@ namespace UnityGLTF.Timeline
 			var path = Path.GetDirectoryName(filename);
 			var file = Path.GetFileName(filename);
 			exporter.SaveGLB(path, file);
+
+			GLTFSceneExporter.ExportDisabledGameObjects = previousExportDisabledState;
+			GLTFSceneExporter.ExportAnimations = previousExportAnimationState;
 		}
 
 		private void PostExport(GLTFSceneExporter exporter, GLTFRoot gltfRoot)
@@ -144,13 +150,13 @@ namespace UnityGLTF.Timeline
 			GLTFAnimation anim = new GLTFAnimation();
 			anim.Name = gltfRoot.GetDefaultScene()?.Name ?? "Recording";
 
-			CollectAndProcessAnimation(exporter, ref root, ref anim, 1f);
+			CollectAndProcessAnimation(exporter, anim);
 
 			if (anim.Channels.Count > 0 && anim.Samplers.Count > 0)
 				gltfRoot.Animations.Add(anim);
 		}
 
-		private void CollectAndProcessAnimation(GLTFSceneExporter gltfSceneExporter, ref Transform root, ref GLTFAnimation anim, float speed)
+		private void CollectAndProcessAnimation(GLTFSceneExporter gltfSceneExporter, GLTFAnimation anim)
 		{
 			foreach (var kvp in data)
 			{
@@ -170,7 +176,7 @@ namespace UnityGLTF.Timeline
 				}
 
 				gltfSceneExporter.RemoveUnneededKeyframes(ref times, ref positions, ref rotations, ref scales, ref weights, ref weightCount);
-				gltfSceneExporter.AddAnimationData(kvp.Key, ref anim, times, positions, rotations, scales, weights);
+				gltfSceneExporter.AddAnimationData(kvp.Key, anim, times, positions, rotations, scales, weights);
 			}
 		}
 
