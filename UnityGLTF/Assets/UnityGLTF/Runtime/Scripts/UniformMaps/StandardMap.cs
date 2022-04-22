@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Material = UnityEngine.Material;
 using Texture = UnityEngine.Texture;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace UnityGLTF
 {
