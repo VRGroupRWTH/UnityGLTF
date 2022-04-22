@@ -19,7 +19,13 @@ namespace UnityGLTF
 
 		protected StandardMap(string shaderName, int MaxLOD = 1000)
 		{
-			var s = Shader.Find(shaderName);
+
+			Shader s = null;
+#if UNITY_EDITOR
+				s = AssetDatabase.LoadAssetAtPath<Shader>($"Packages/Universal RP/Shaders/Lit.shader");
+#else
+				s = Shader.Find(shaderName);
+#endif
 			if (s == null)
 			{
 				throw new ShaderNotFoundException(shaderName + " not found. Did you forget to add it to the build?");
