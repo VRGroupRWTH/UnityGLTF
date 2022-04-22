@@ -25,9 +25,11 @@ namespace UnityGLTF
 
 			Shader s = null;
 #if UNITY_EDITOR
-				s = AssetDatabase.LoadAssetAtPath<Shader>($"Packages/Universal RP/Shaders/Lit.shader");
+			string path = $"Packages/com.unity.render-pipelines.universal/Shaders/Lit.shader";
+			Debug.Log($"Loading shader at path: {path}")
+			s = AssetDatabase.LoadAssetAtPath<Shader>(path);
 #else
-				s = Shader.Find(shaderName);
+			s = Shader.Find(shaderName);
 #endif
 			if (s == null)
 			{
