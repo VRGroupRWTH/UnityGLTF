@@ -29,7 +29,7 @@ namespace UnityGLTF.Loader
 			var request = UnityWebRequest.Get(path);
 			if (credentials != null)
 			{
-				string auth = Authenticate(credentials.UserName, credentials.Password)
+				string auth = Authenticate(credentials.UserName, credentials.Password);
 				request.SetRequestHeader("AUTHORIZATION", auth);
 			}
 			// request.downloadHandler = new DownloadStreamHandler(new byte[1024 * 1024]);
