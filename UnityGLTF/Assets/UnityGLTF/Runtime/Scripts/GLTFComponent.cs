@@ -91,7 +91,7 @@ namespace UnityGLTF
 	                fullPath = GLTFUri;
 
                 string dir = URIHelper.GetDirectoryName(fullPath);
-                importOptions.DataLoader = new UnityWebRequestLoader(dir, NetworkCredential);
+                importOptions.DataLoader = new UnityWebRequestLoader(dir, NetworkCredential.UserName, NetworkCredential.Password);
                 sceneImporter = Factory.CreateSceneImporter(
 	                Path.GetFileName(fullPath),
 	                importOptions

@@ -8,17 +8,19 @@ namespace UnityGLTF.Loader
 	public class UnityWebRequestLoader : IDataLoader
 	{
 		private string dir;
-		private NetworkCredential credentials;
+		private string password;
+		private string username
 
 		public UnityWebRequestLoader(string dir)
 		{
 			this.dir = dir;
 		}
 
-		public UnityWebRequestLoader(string dir, NetworkCredential newCredentials)
+		public UnityWebRequestLoader(string dir, string usr, string pw)
 		{
 			this.dir = dir;
-			this.credentials = newCredentials;
+			this.password = pw;
+			this.username = usr;
 		}
 
 		public async Task<Stream> LoadStreamAsync(string relativeFilePath)
@@ -29,7 +31,7 @@ namespace UnityGLTF.Loader
 			var request = UnityWebRequest.Get(path);
 			if (credentials != null)
 			{
-				string auth = Authenticate(credentials.UserName, credentials.Password);
+				string auth = Authenticate(username, password);
 				request.SetRequestHeader("AUTHORIZATION", auth);
 			}
 			// request.downloadHandler = new DownloadStreamHandler(new byte[1024 * 1024]);
