@@ -29,7 +29,7 @@ namespace UnityGLTF.Loader
 			if (File.Exists(path))
 				path = "file://" + Path.GetFullPath(path);
 			var request = UnityWebRequest.Get(path);
-			if (credentials != null)
+			if (username == "")
 			{
 				string auth = Authenticate(username, password);
 				request.SetRequestHeader("AUTHORIZATION", auth);
