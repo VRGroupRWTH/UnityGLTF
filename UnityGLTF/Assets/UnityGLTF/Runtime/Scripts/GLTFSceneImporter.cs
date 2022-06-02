@@ -19,7 +19,11 @@ using UnityGLTF.Loader;
 using LightType = UnityEngine.LightType;
 using Matrix4x4 = GLTF.Math.Matrix4x4;
 using Object = UnityEngine.Object;
-#if !WINDOWS_UWP
+using Quaternion = UnityEngine.Quaternion;
+using Vector2 = UnityEngine.Vector2;
+using Vector3 = UnityEngine.Vector3;
+using Vector4 = UnityEngine.Vector4;
+#if !WINDOWS_UWP && !UNITY_WEBGL
 using ThreadPriority = System.Threading.ThreadPriority;
 #endif
 using WrapMode = UnityEngine.WrapMode;
@@ -89,6 +93,11 @@ namespace UnityGLTF
 				}
 			}
 		}
+
+		public override string ToString()
+		{
+			return $"{(Progress * 100.0):F2}% (Buffers: {BuffersLoaded}/{BuffersTotal}, Nodes: {NodeLoaded}/{NodeTotal}, Texs: {TextureLoaded}/{TextureTotal})";
+		}
 	}
 
 	public struct ImportStatistics
@@ -132,7 +141,7 @@ namespace UnityGLTF
 		{
 			get
 			{
-				return Application.isEditor ? false : _isMultithreaded;
+				return (Application.isEditor || Application.platform == RuntimePlatform.WebGLPlayer) ? false : _isMultithreaded;
 			}
 			set
 			{
@@ -542,7 +551,7 @@ namespace UnityGLTF
 
 		private async Task LoadJson(string jsonFilePath)
 		{
-#if !WINDOWS_UWP
+#if !WINDOWS_UWP && !UNITY_WEBGL
 			var dataLoader2 = _options.DataLoader as IDataLoader2;
 			if (IsMultithreaded && dataLoader2 != null)
 			{
@@ -559,7 +568,7 @@ namespace UnityGLTF
 
 			_gltfStream.StartPosition = 0;
 
-#if !WINDOWS_UWP
+#if !WINDOWS_UWP && !UNITY_WEBGL
 			if (IsMultithreaded)
 			{
 				Thread parseJsonThread = new Thread(() => GLTFParser.ParseJson(_gltfStream.Stream, out _gltfRoot, _gltfStream.StartPosition));
@@ -820,6 +829,13 @@ namespace UnityGLTF
 			progressStatus.TextureLoaded++;
 			progress?.Report(progressStatus);
 			_assetCache.ImageCache[imageCacheIndex] = texture;
+		}
+
+		private static void AddNewBufferAndViewToAccessor(byte[] data, Accessor accessor, GLTFRoot _gltfRoot)
+		{
+			_gltfRoot.Buffers.Add(new GLTFBuffer() { ByteLength = (uint) data.Length });
+			_gltfRoot.BufferViews.Add(new BufferView() { ByteLength = (uint) data.Length, ByteOffset = 0, Buffer = new BufferId() { Id = _gltfRoot.Buffers.Count, Root = _gltfRoot } });
+			accessor.BufferView = new BufferViewId() { Id = _gltfRoot.BufferViews.Count - 1, Root = _gltfRoot };
 		}
 
 		protected virtual async Task ConstructMeshTargets(MeshPrimitive primitive, int meshIndex, int primitiveIndex)
@@ -1191,8 +1207,9 @@ namespace UnityGLTF
 					output = samplerCache.Output.AccessorContent;
 
 				string[] propertyNames;
-
-				switch (channel.Target.Path)
+				var known = Enum.TryParse(channel.Target.Path, out GLTFAnimationChannelPath path);
+				if (!known) continue;
+				switch (path)
 				{
 					case GLTFAnimationChannelPath.translation:
 						propertyNames = new string[] { "localPosition.x", "localPosition.y", "localPosition.z" };
@@ -1514,18 +1531,14 @@ namespace UnityGLTF
 			}
 			*/
 
-
+			// TODO this should be handled by the lights extension directly, not here
 			const string lightExt = KHR_lights_punctualExtensionFactory.EXTENSION_NAME;
 			KHR_LightsPunctualNodeExtension lightsExtension = null;
-			if (_gltfRoot.ExtensionsUsed != null
-			    && _gltfRoot.ExtensionsUsed.Contains(lightExt)
-			    && node.Extensions != null
-			    && node.Extensions.ContainsKey(lightExt))
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(lightExt) && node.Extensions != null && node.Extensions.ContainsKey(lightExt))
 			{
 				lightsExtension = node.Extensions[lightExt] as KHR_LightsPunctualNodeExtension;
 				var l = lightsExtension.LightId;
-				// var allLights = _gltfRoot.Extensions[KHR_lights_punctualExtensionFactory.EXTENSION_NAME] as KHR_LightsPunctualExtension;
-				// var selected = allLights.Lights[l.Id];
+
 				var light = l.Value;
 
 				var newLight = nodeObj.AddComponent<Light>();
@@ -1543,10 +1556,10 @@ namespace UnityGLTF
 				}
 
 				newLight.name = light.Name;
-				newLight.intensity = (float) light.Intensity;
+				newLight.intensity = (float) light.Intensity / Mathf.PI;
 				newLight.color = new Color(light.Color.R, light.Color.G, light.Color.B, light.Color.A);
 				newLight.range = (float) light.Range;
-				if(light.Spot != null)
+				if (light.Spot != null)
 				{
 					#if UNITY_2019_1_OR_NEWER
 					newLight.innerSpotAngle = (float) light.Spot.InnerConeAngle * 2 / (Mathf.Deg2Rad * 0.8f);
@@ -1907,6 +1920,56 @@ namespace UnityGLTF
 				}
 			}
 
+			if (def.Extensions != null && def.Extensions.ContainsKey(KHR_materials_transmission_Factory.EXTENSION_NAME))
+			{
+				var transmissionDef = (KHR_materials_transmission)def.Extensions[KHR_materials_transmission_Factory.EXTENSION_NAME];
+				if (transmissionDef.transmissionTexture != null)
+				{
+					var textureId = transmissionDef.transmissionTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+			}
+
+			if (def.Extensions != null && def.Extensions.ContainsKey(KHR_materials_volume_Factory.EXTENSION_NAME))
+			{
+				var transmissionDef = (KHR_materials_volume)def.Extensions[KHR_materials_volume_Factory.EXTENSION_NAME];
+				if (transmissionDef.thicknessTexture != null)
+				{
+					var textureId = transmissionDef.thicknessTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+			}
+
+			if (def.Extensions != null && def.Extensions.ContainsKey(KHR_materials_iridescence_Factory.EXTENSION_NAME))
+			{
+				var iridescenceDef = (KHR_materials_iridescence) def.Extensions[KHR_materials_iridescence_Factory.EXTENSION_NAME];
+				if (iridescenceDef.iridescenceTexture != null)
+				{
+					var textureId = iridescenceDef.iridescenceTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+				if (iridescenceDef.iridescenceThicknessTexture != null)
+				{
+					var textureId = iridescenceDef.iridescenceThicknessTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+			}
+
+			if (def.Extensions != null && def.Extensions.ContainsKey(KHR_materials_specular_Factory.EXTENSION_NAME))
+			{
+				var specularDef = (KHR_materials_specular) def.Extensions[KHR_materials_specular_Factory.EXTENSION_NAME];
+				if (specularDef.specularTexture != null)
+				{
+					var textureId = specularDef.specularTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+				if (specularDef.specularColorTexture != null)
+				{
+					var textureId = specularDef.specularColorTexture.Index;
+					tasks.Add(ConstructImageBuffer(textureId.Value, textureId.Id));
+				}
+			}
+
 			return Task.WhenAll(tasks);
 		}
 
@@ -1986,9 +2049,48 @@ namespace UnityGLTF
 			_assetCache.MeshCache[meshIndex].LoadedMesh = mesh;
 		}
 
+		private class TextureData
+		{
+			public Texture Texture = null;
+			public int TexCoord = 0;
+			public double DataMultiplier = 1;
+			public Vector2 Offset = Vector2.zero;
+			public double Rotation = 0;
+			public Vector2 Scale = Vector2.one;
+			public int TexCoordExtra = 0;
+		}
+
+		private async Task<TextureData> FromTextureInfo(TextureInfo textureInfo)
+		{
+			var result = new TextureData();
+			if (textureInfo?.Index?.Value == null) return result;
+
+			TextureId textureId = textureInfo.Index;
+			await ConstructTexture(textureId.Value, textureId.Id, !KeepCPUCopyOfTexture, true);
+			result.Texture = _assetCache.TextureCache[textureId.Id].Texture;
+			result.TexCoord = textureInfo.TexCoord;
+
+			if (textureInfo is NormalTextureInfo nti)
+				result.DataMultiplier = nti.Scale;
+			if (textureInfo is OcclusionTextureInfo oti)
+				result.DataMultiplier = oti.Strength;
+
+			var ext = GetTextureTransform(textureInfo);
+			if (ext != null)
+			{
+				result.Offset = ext.Offset.ToUnityVector2Raw();
+				result.Rotation = ext.Rotation;
+				result.Scale = ext.Scale.ToUnityVector2Raw();
+				result.TexCoordExtra = ext.TexCoord;
+			}
+
+			return result;
+		}
+
 		protected virtual async Task ConstructMaterial(GLTFMaterial def, int materialIndex)
 		{
 			IUniformMap mapper;
+
 			const string specGlossExtName = KHR_materials_pbrSpecularGlossinessExtensionFactory.EXTENSION_NAME;
 			const string unlitExtName = KHR_MaterialsUnlitExtensionFactory.EXTENSION_NAME;
 			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(specGlossExtName)
@@ -2023,7 +2125,17 @@ namespace UnityGLTF
 				}
 				else
 				{
+					// do we have URP or Unity 2021.2+? Use the PBR Graph Material!
+#if UNITY_2021_3_OR_NEWER
+					mapper = new PBRGraphMap();
+#elif UNITY_2019_1_OR_NEWER
+					if(GraphicsSettings.currentRenderPipeline)
+						mapper = new PBRGraphMap();
+					else
+						mapper = new MetalRoughMap(MaximumLod);
+#else
 					mapper = new MetalRoughMap(MaximumLod);
+#endif
 				}
 			}
 
@@ -2146,6 +2258,96 @@ namespace UnityGLTF
 				}
 			}
 
+			var iorMapper = mapper as IIORMap;
+			if (iorMapper != null)
+			{
+				var ior = GetIOR(def);
+				if (ior != null)
+				{
+					iorMapper.IOR = ior.ior;
+				}
+			}
+
+			var transmissionMapper = mapper as ITransmissionMap;
+			if (transmissionMapper != null)
+			{
+				var transmission = GetTransmission(def);
+				if (transmission != null)
+				{
+					transmissionMapper.TransmissionFactor = transmission.transmissionFactor;
+					var td = await FromTextureInfo(transmission.transmissionTexture);
+					transmissionMapper.TransmissionTexture = td.Texture;
+
+					if (transmissionMapper.TransmissionFactor > 0)
+					{
+						mapper.Material.renderQueue = 3000;
+						mapper.Material.EnableKeyword("_VOLUME_TRANSMISSION_ON");
+					}
+				}
+			}
+
+			var volumeMapper = mapper as IVolumeMap;
+			if (volumeMapper != null)
+			{
+				var volume = GetVolume(def);
+				if (volume != null)
+				{
+					volumeMapper.AttenuationColor = QualitySettings.activeColorSpace == ColorSpace.Linear ? volume.attenuationColor.ToUnityColorLinear() : volume.attenuationColor.ToUnityColorRaw();
+					volumeMapper.AttenuationDistance = volume.attenuationDistance;
+					volumeMapper.ThicknessFactor = volume.thicknessFactor;
+					var td = await FromTextureInfo(volume.thicknessTexture);
+					volumeMapper.ThicknessTexture = td.Texture;
+
+					if (volumeMapper.ThicknessFactor > 0)
+					{
+						mapper.Material.renderQueue = 3000;
+						mapper.Material.EnableKeyword("_VOLUME_TRANSMISSION_ON");
+					}
+				}
+			}
+
+			var iridescenceMapper = mapper as IIridescenceMap;
+			if (iridescenceMapper != null)
+			{
+				var iridescence = GetIridescence(def);
+				if (iridescence != null)
+				{
+					iridescenceMapper.IridescenceFactor = iridescence.iridescenceFactor;
+					iridescenceMapper.IridescenceIor = iridescence.iridescenceIor;
+					iridescenceMapper.IridescenceThicknessMinimum = iridescence.iridescenceThicknessMinimum;
+					iridescenceMapper.IridescenceThicknessMaximum = iridescence.iridescenceThicknessMaximum;
+					var td = await FromTextureInfo(iridescence.iridescenceTexture);
+					iridescenceMapper.IridescenceTexture = td.Texture;
+					var td2 = await FromTextureInfo(iridescence.iridescenceThicknessTexture);
+					iridescenceMapper.IridescenceThicknessTexture = td2.Texture;
+
+					if (iridescenceMapper.IridescenceFactor > 0)
+					{
+						mapper.Material.EnableKeyword("_IRIDESCENCE_ON");
+					}
+				}
+			}
+
+			var specularMapper = mapper as ISpecularMap;
+			if (specularMapper != null)
+			{
+				var specular = GetSpecular(def);
+				if (specular != null)
+				{
+					specularMapper.SpecularFactor = specular.specularFactor;
+					specularMapper.SpecularColorFactor = specular.specularColorFactor.ToUnityColorLinear();
+					var td = await FromTextureInfo(specular.specularTexture);
+					specularMapper.SpecularTexture = td.Texture;
+					var td2 = await FromTextureInfo(specular.specularColorTexture);
+					specularMapper.SpecularColorTexture = td2.Texture;
+
+					if (specularMapper.SpecularFactor > 0)
+					{
+						mapper.Material.EnableKeyword("_SPECULAR_ON");
+					}
+				}
+			}
+
 			if (def.NormalTexture != null)
 			{
 				TextureId textureId = def.NormalTexture.Index;
@@ -2198,10 +2400,21 @@ namespace UnityGLTF
 				}
 			}
 
-			mapper.EmissiveFactor = def.EmissiveFactor.ToUnityColorRaw();
+			mapper.EmissiveFactor = QualitySettings.activeColorSpace == ColorSpace.Linear ? def.EmissiveFactor.ToUnityColorLinear() : def.EmissiveFactor.ToUnityColorRaw();
+
+			var emissiveExt = GetEmissiveStrength(def);
+			if (emissiveExt != null)
+			{
+				mapper.EmissiveFactor = mapper.EmissiveFactor * emissiveExt.emissiveStrength;
+			}
 
 			var vertColorMapper = mapper.Clone();
 			vertColorMapper.VertexColorsEnabled = true;
+
+			if (mapper is PBRGraphMap pbrGraphMap)
+			{
+				MaterialExtensions.ValidateMaterialKeywords(pbrGraphMap.Material);
+			}
 
 			MaterialCacheData materialWrapper = new MaterialCacheData
 			{
@@ -2300,8 +2513,7 @@ namespace UnityGLTF
 			return _assetCache.TextureCache[textureIndex].Texture;
 		}
 
-		protected virtual async Task ConstructTexture(GLTFTexture texture, int textureIndex,
-			bool markGpuOnly, bool isLinear)
+		protected virtual async Task ConstructTexture(GLTFTexture texture, int textureIndex, bool markGpuOnly, bool isLinear)
 		{
 			if (_assetCache.TextureCache[textureIndex].Texture == null)
 			{
@@ -2427,6 +2639,66 @@ namespace UnityGLTF
 				return (ExtTextureTransformExtension)extension;
 			}
 			else return null;
+		}
+
+		protected virtual KHR_materials_emissive_strength GetEmissiveStrength(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_emissive_strength_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_emissive_strength_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_emissive_strength) extension;
+			}
+			else return null;
+		}
+
+		protected virtual KHR_materials_transmission GetTransmission(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_transmission_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_transmission_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_transmission) extension;
+			}
+			return null;
+		}
+
+		protected virtual KHR_materials_volume GetVolume(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_volume_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_volume_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_volume) extension;
+			}
+			return null;
+		}
+
+		protected virtual KHR_materials_ior GetIOR(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_ior_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_ior_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_ior) extension;
+			}
+			return null;
+		}
+
+		protected virtual KHR_materials_iridescence GetIridescence(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_iridescence_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_iridescence_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_iridescence) extension;
+			}
+			return null;
+		}
+
+		protected virtual KHR_materials_specular GetSpecular(GLTFMaterial def)
+		{
+			if (_gltfRoot.ExtensionsUsed != null && _gltfRoot.ExtensionsUsed.Contains(KHR_materials_specular_Factory.EXTENSION_NAME) &&
+			    def.Extensions != null && def.Extensions.TryGetValue(KHR_materials_specular_Factory.EXTENSION_NAME, out var extension))
+			{
+				return (KHR_materials_specular) extension;
+			}
+			return null;
 		}
 
 		protected async Task YieldOnTimeoutAndThrowOnLowMemory()

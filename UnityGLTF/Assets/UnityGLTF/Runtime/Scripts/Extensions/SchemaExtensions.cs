@@ -60,10 +60,11 @@ namespace UnityGLTF.Extensions
 		/// </summary>
 		/// <param name="node">gltf node to modify</param>
 		/// <param name="transform">unity transform to convert</param>
-		public static void SetUnityTransform(this Node node, Transform transform)
+		/// <param name="invertLookDirection">invert look direction (e.g. for lights and cameras)</param>
+		public static void SetUnityTransform(this Node node, Transform transform, bool invertLookDirection)
 		{
 			node.Translation = transform.localPosition.ToGltfVector3Convert();
-			node.Rotation = transform.localRotation.ToGltfQuaternionConvert();
+			node.Rotation = (transform.localRotation * (invertLookDirection ? new Quaternion(0, -1, 0, 0) : Quaternion.identity)).ToGltfQuaternionConvert();
 			node.Scale = transform.localScale.ToGltfVector3Raw();
 		}
 
@@ -467,12 +468,12 @@ namespace UnityGLTF.Extensions
 		public static UnityEngine.Vector3[] ConvertVector3CoordinateSpaceAndCopy(Vector3[] array, GLTF.Math.Vector3 coordinateSpaceCoordinateScale)
 		{
 			var returnArray = new UnityEngine.Vector3[array.Length];
+			var coordinateScale = coordinateSpaceCoordinateScale.ToUnityVector3Raw();
 
 			for (int i = 0; i < array.Length; i++)
 			{
-				returnArray[i].x = array[i].x * coordinateSpaceCoordinateScale.X;
-				returnArray[i].y = array[i].y * coordinateSpaceCoordinateScale.Y;
-				returnArray[i].z = array[i].z * coordinateSpaceCoordinateScale.Z;
+				returnArray[i] = array[i];
+				returnArray[i].Scale(coordinateScale);
 			}
 
 			return returnArray;
@@ -503,13 +504,12 @@ namespace UnityGLTF.Extensions
 		public static Vector4[] ConvertVector4CoordinateSpaceAndCopy(Vector4[] array, GLTF.Math.Vector4 coordinateSpaceCoordinateScale)
 		{
 			var returnArray = new Vector4[array.Length];
+			var coordinateScale = coordinateSpaceCoordinateScale.ToUnityVector4Raw();
 
 			for (var i = 0; i < array.Length; i++)
 			{
-				returnArray[i].x = array[i].x * coordinateSpaceCoordinateScale.X;
-				returnArray[i].y = array[i].y * coordinateSpaceCoordinateScale.Y;
-				returnArray[i].z = array[i].z * coordinateSpaceCoordinateScale.Z;
-				returnArray[i].w = array[i].w * coordinateSpaceCoordinateScale.W;
+				returnArray[i] = array[i];
+				returnArray[i].Scale(coordinateScale);
 			}
 
 			return returnArray;
@@ -562,21 +562,21 @@ namespace UnityGLTF.Extensions
 			return outMatrixArr;
 		}
 
-		public static Vector4 switchHandedness(this Vector4 input)
+		public static Quaternion SwitchHandedness(this Quaternion input)
+		{
+			return new Quaternion(-input.x, input.y, input.z, -input.w);
+		}
+
+		/*
+		public static Vector4 SwitchHandedness(this Vector4 input)
 		{
 			return new Vector4(-input.x, input.y, input.z, -input.w);
 		}
 
-
-		public static Quaternion switchHandedness(this Quaternion input)
+		public static Matrix4x4 SwitchHandedness(this Matrix4x4 matrix)
 		{
-			return new Quaternion(input.x, input.y, -input.z, -input.w);
-		}
-
-		public static Matrix4x4 switchHandedness(this Matrix4x4 matrix)
-		{
-			Vector3 position = matrix.GetColumn(3).switchHandedness();
-			Quaternion rotation = Quaternion.LookRotation(matrix.GetColumn(2), matrix.GetColumn(1)).switchHandedness();
+			Vector3 position = matrix.GetColumn(3).SwitchHandedness();
+			Quaternion rotation = Quaternion.LookRotation(matrix.GetColumn(2), matrix.GetColumn(1)).SwitchHandedness();
 			Vector3 scale = new Vector3(matrix.GetColumn(0).magnitude, matrix.GetColumn(1).magnitude, matrix.GetColumn(2).magnitude);
 
 			float epsilon = 0.00001f;
@@ -599,5 +599,6 @@ namespace UnityGLTF.Extensions
 			// convert transform values from left handed to right handed
 			return Matrix4x4.TRS(position, rotation, scale);
 		}
+		*/
 	}
 }

@@ -271,7 +271,7 @@ namespace GLTF.Schema
 				return Scene.Value;
 			}
 
-			if (Scenes.Count > 0)
+			if (Scenes?.Count > 0)
 			{
 				return Scenes[0];
 			}
@@ -372,6 +372,9 @@ namespace GLTF.Schema
 
 			jsonWriter.WriteStartObject();
 
+			jsonWriter.WritePropertyName("asset");
+			Asset.Serialize(jsonWriter);
+
 			if (ExtensionsUsed != null && ExtensionsUsed.Count > 0)
 			{
 				jsonWriter.WritePropertyName("extensionsUsed");
@@ -390,6 +393,23 @@ namespace GLTF.Schema
 				foreach (var extension in ExtensionsRequired)
 				{
 					jsonWriter.WriteValue(extension);
+				}
+				jsonWriter.WriteEndArray();
+			}
+
+			if (Scene != null)
+			{
+				jsonWriter.WritePropertyName("scene");
+				Scene.Serialize(jsonWriter);
+			}
+
+			if (Scenes != null && Scenes.Count > 0)
+			{
+				jsonWriter.WritePropertyName("scenes");
+				jsonWriter.WriteStartArray();
+				foreach (var scene in Scenes)
+				{
+					scene.Serialize(jsonWriter);
 				}
 				jsonWriter.WriteEndArray();
 			}
@@ -415,9 +435,6 @@ namespace GLTF.Schema
 				}
 				jsonWriter.WriteEndArray();
 			}
-
-			jsonWriter.WritePropertyName("asset");
-			Asset.Serialize(jsonWriter);
 
 			if (Buffers != null && Buffers.Count > 0)
 			{
@@ -491,6 +508,12 @@ namespace GLTF.Schema
 				jsonWriter.WriteStartArray();
 				foreach (var node in Nodes)
 				{
+					if (node.Light != null)
+					{
+						var khrLightPunctual = new KHR_LightsPunctualNodeExtension(node.Light.Id, this);
+						node.AddExtension(KHR_lights_punctualExtensionFactory.EXTENSION_NAME, khrLightPunctual);
+					}
+					
 					node.Serialize(jsonWriter);
 				}
 				jsonWriter.WriteEndArray();
@@ -503,23 +526,6 @@ namespace GLTF.Schema
 				foreach (var sampler in Samplers)
 				{
 					sampler.Serialize(jsonWriter);
-				}
-				jsonWriter.WriteEndArray();
-			}
-
-			if (Scene != null)
-			{
-				jsonWriter.WritePropertyName("scene");
-				Scene.Serialize(jsonWriter);
-			}
-
-			if (Scenes != null && Scenes.Count > 0)
-			{
-				jsonWriter.WritePropertyName("scenes");
-				jsonWriter.WriteStartArray();
-				foreach (var scene in Scenes)
-				{
-					scene.Serialize(jsonWriter);
 				}
 				jsonWriter.WriteEndArray();
 			}

@@ -4,8 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityGLTF.Loader;
 
 namespace UnityGLTF
@@ -24,6 +26,7 @@ namespace UnityGLTF
 		
 		[NonSerialized]
 		public NetworkCredential NetworkCredential;
+        public UnityAction onLoadComplete;
 
 #if UNITY_ANIMATION
         public IEnumerable<Animation> Animations { get; private set; }
@@ -31,8 +34,6 @@ namespace UnityGLTF
 
 		[SerializeField]
 		private bool loadOnStart = true;
-
-		[SerializeField] private bool MaterialsOnly = false;
 
 		[SerializeField] private int RetryCount = 10;
 		[SerializeField] private float RetryTimeout = 2.0f;
@@ -82,58 +83,36 @@ namespace UnityGLTF
 			{
                 Factory = Factory ?? ScriptableObject.CreateInstance<DefaultImporterFactory>();
 
-				if (UseStream)
-				{
-					string fullPath;
-					if (AppendStreamingAssets)
-					{
-						// Path.Combine treats paths that start with the separator character
-						// as absolute paths, ignoring the first path passed in. This removes
-						// that character to properly handle a filename written with it.
-						fullPath = Path.Combine(Application.streamingAssetsPath, GLTFUri.TrimStart(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }));
-					}
-					else
-					{
-						fullPath = GLTFUri;
-					}
-					string directoryPath = URIHelper.GetDirectoryName(fullPath);
-					importOptions.DataLoader = new FileLoader(directoryPath);
-					sceneImporter = Factory.CreateSceneImporter(
-						Path.GetFileName(GLTFUri),
-						importOptions
-						);
-				}
-				else
-				{
-					string directoryPath = URIHelper.GetDirectoryName(GLTFUri);
-					importOptions.DataLoader = new WebRequestLoader(directoryPath, NetworkCredential);
+                // UseStream is currently not supported...
+                string fullPath;
+                if (AppendStreamingAssets)
+	                fullPath = Path.Combine(Application.streamingAssetsPath, GLTFUri.TrimStart(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }));
+                else
+	                fullPath = GLTFUri;
 
-					sceneImporter = Factory.CreateSceneImporter(
-						URIHelper.GetFileFromUri(new Uri(GLTFUri)),
-						importOptions
-						);
+                string dir = URIHelper.GetDirectoryName(fullPath);
+                importOptions.DataLoader = new UnityWebRequestLoader(dir, NetworkCredential);
+                sceneImporter = Factory.CreateSceneImporter(
+	                Path.GetFileName(fullPath),
+	                importOptions
+                );
 
-				}
-
-				sceneImporter.SceneParent = gameObject.transform;
+                sceneImporter.SceneParent = gameObject.transform;
 				sceneImporter.Collider = Collider;
 				sceneImporter.MaximumLod = MaximumLod;
 				sceneImporter.Timeout = Timeout;
 				sceneImporter.IsMultithreaded = Multithreaded;
 				sceneImporter.CustomShaderName = shaderOverride ? shaderOverride.name : null;
 
-				if (MaterialsOnly)
-				{
-					var mat = await sceneImporter.LoadMaterialAsync(0);
-					var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-					cube.transform.SetParent(gameObject.transform);
-					var renderer = cube.GetComponent<Renderer>();
-					renderer.sharedMaterial = mat;
-				}
-				else
-				{
-					await sceneImporter.LoadSceneAsync();
-				}
+				// for logging progress
+				await sceneImporter.LoadSceneAsync(
+					onLoadComplete:LoadCompleteAction
+					// ,progress: new Progress<ImportProgress>(
+					// 	p =>
+					// 	{
+					// 		Debug.Log("Progress: " + p);
+					// 	})
+				);
 
 				// Override the shaders on all materials if a shader is provided
 				if (shaderOverride != null)
@@ -145,7 +124,6 @@ namespace UnityGLTF
 					}
 				}
 
-				// print("model loaded with vertices: " + sceneImporter.Statistics.VertexCount.ToString() + ", triangles: " + sceneImporter.Statistics.TriangleCount.ToString());
 				LastLoadedScene = sceneImporter.LastLoadedScene;
 
 #if UNITY_ANIMATION
@@ -153,7 +131,7 @@ namespace UnityGLTF
 
 				if (PlayAnimationOnLoad && Animations.Any())
 				{
-					Animations.FirstOrDefault().Play();
+					Animations.First().Play();
 				}
 #endif
 			}
@@ -166,6 +144,11 @@ namespace UnityGLTF
 					importOptions.DataLoader = null;
 				}
 			}
+		}
+
+		private void LoadCompleteAction(GameObject obj, ExceptionDispatchInfo exceptionDispatchInfo)
+		{
+			onLoadComplete?.Invoke();
 		}
 	}
 }

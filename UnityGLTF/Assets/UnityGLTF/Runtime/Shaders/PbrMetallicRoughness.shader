@@ -31,6 +31,7 @@ Shader "GLTF/PbrMetallicRoughness"
 		_OcclusionStrength("Occlusion Strength", Range(0.0, 1.0)) = 1.0
 		_OcclusionMap("Occlusion Texture", 2D) = "white" {}
 
+		[HDR]
 		_EmissionColor("Emissive Factor", Color) = (0,0,0)
 		_EmissionMap("Emissive Texture", 2D) = "white" {}
 
@@ -73,11 +74,11 @@ Shader "GLTF/PbrMetallicRoughness"
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature _EMISSION
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature ___ _DETAIL_MULX2
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
-			#pragma shader_feature _ _GLOSSYREFLECTIONS_OFF
-			#pragma shader_feature _PARALLAXMAP
+			// #pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
+			// #pragma shader_feature _ _GLOSSYREFLECTIONS_OFF
+			// #pragma shader_feature _PARALLAXMAP
 
 			#pragma multi_compile_fwdbase
 			#pragma multi_compile_fog
@@ -110,10 +111,10 @@ Shader "GLTF/PbrMetallicRoughness"
 			#pragma shader_feature _NORMALMAP
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
-			#pragma shader_feature ___ _DETAIL_MULX2
-			#pragma shader_feature _PARALLAXMAP
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
+			// #pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _PARALLAXMAP
 
 			#pragma multi_compile_fwdadd_fullshadows
 			#pragma multi_compile_fog
@@ -141,7 +142,7 @@ Shader "GLTF/PbrMetallicRoughness"
 
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _PARALLAXMAP
+			// #pragma shader_feature _PARALLAXMAP
 			#pragma multi_compile_shadowcaster
 			#pragma multi_compile_instancing
 
@@ -170,10 +171,10 @@ Shader "GLTF/PbrMetallicRoughness"
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature _EMISSION
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
-			#pragma shader_feature ___ _DETAIL_MULX2
-			#pragma shader_feature _PARALLAXMAP
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
+			// #pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _PARALLAXMAP
 
 			#pragma multi_compile_prepassfinal
 			#pragma multi_compile_instancing
@@ -202,8 +203,8 @@ Shader "GLTF/PbrMetallicRoughness"
 
 			#pragma shader_feature _EMISSION
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature ___ _DETAIL_MULX2
 			#pragma shader_feature EDITOR_VISUALIZATION
 
 			#include "UnityStandardMeta.cginc"
@@ -231,11 +232,11 @@ Shader "GLTF/PbrMetallicRoughness"
 			
 			#pragma shader_feature _NORMALMAP
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
-			#pragma shader_feature _EMISSION 
-			#pragma shader_feature _METALLICGLOSSMAP 
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
-			#pragma shader_feature _ _GLOSSYREFLECTIONS_OFF
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
+			// #pragma shader_feature _ _GLOSSYREFLECTIONS_OFF
 			// SM2.0: NOT SUPPORTED shader_feature ___ _DETAIL_MULX2
 			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
 
@@ -268,9 +269,9 @@ Shader "GLTF/PbrMetallicRoughness"
 			#pragma shader_feature _NORMALMAP
 			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
-			#pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature _ _SPECULARHIGHLIGHTS_OFF
+			// #pragma shader_feature ___ _DETAIL_MULX2
 			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
 			#pragma skip_variants SHADOWS_SOFT
 			
@@ -324,8 +325,8 @@ Shader "GLTF/PbrMetallicRoughness"
 
 			#pragma shader_feature _EMISSION
 			#pragma shader_feature _METALLICGLOSSMAP
-			#pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			#pragma shader_feature ___ _DETAIL_MULX2
+			// #pragma shader_feature _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			// #pragma shader_feature ___ _DETAIL_MULX2
 			#pragma shader_feature EDITOR_VISUALIZATION
 
 			#include "UnityStandardMeta.cginc"

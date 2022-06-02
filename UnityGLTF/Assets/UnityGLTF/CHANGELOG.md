@@ -4,6 +4,56 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.7.0-pre] - 2022-06-01
+- feat: experimental support for KHR_animation_pointer
+- feat: experimental URP (2020.3+) & BiRP (2021.2+) Shader Graph for export and import, `UnityGLTF/PBRGraph`
+- feat: approximated support for exporting and importing KHR_materials_transmission, KHR_materials_volume, KHR_materials_ior, KHR_materials_iridescence, best used with `UnityGLTF/PBRGraph`
+- feat: renderer features and post effect for rough refraction / transmission (for URP and BiRP)
+- fixed: light and camera directions were flipped when animated
+- fixed: normal textures were exported with wrong color space in .gltf
+- fixed: WebRequestLoader edge case with relative paths
+- improved: better heuristic for PBR material export and generally better glTF-related material property export
+
+## [1.6.1-pre.3] - 2022-05-10
+- feat: allow replacing logger for GLTFSceneExporter with a custom one, allows to reduce number of logs
+- feat: added more ProfilerMarkers
+- removed: removed submodules from repository to make usage as submodule in other projects easier
+- fixed: bad performance in GLTFRecorder when recording lots of animation and/or Blendshape weights
+- fixed: some mismatched ProfilerMarker.Begin/End calls
+- fixed: less allocations when writing accessors
+
+## [1.6.1-pre.2] - 2022-05-06
+- feat: allow recording root object in worldspace in GLTFRecorder
+
+## [1.6.1-pre] - 2022-05-06
+- feat: added experimental support for KHR_animation_pointer in-editor animation export (for select properties), can be turned on in `ProjectSettings/UnityGltf`
+- feat: added scene export as GLB (fixes #22)
+- fixed: roundtrip issues with glTFast when alpha testing is used
+- fixed: no build errors in Samples anymore
+- fixed: allow exporting skinned mesh animations even when the mesh isn't readable (bone animation is then still exported)
+
+## [1.6.0-pre] - 2022-04-28
+- feat: added WebGL import support (export was already supported)
+- feat: added WebGL animation export support
+- feat: added onLoadComplete action to GLTFComponent
+- feat: added ProfilerMarkers for export
+- feat: import support for KHR_materials_emissive_strength
+- changed: replaced FileLoader/WebRequestLoader with simpler UnityWebRequestLoader for better platform support. Use the previous ones if you need streaming.
+- removed: removed unused shader variants from BiRP shaders
+- fixed: sparse accessor JSON is properly parsed (no sparse accessor import support yet though)
+- fixed: no more validation errors regarding minMag filters, bufferView.byteStride for animation samplers, bufferView.target for index/vertex data
+- fixed: only export KHR_materials_emissive_strength if emissive intensity > 1
+- fixed: URP roundtrip now works with glTFast imports (#42)
+- fixed: better handling of filenames for glTF + bin + textures export (#41, #40)
+- fixed: add vertex color alpha support, add _EmissionMap_ST support to BiRP shader
+- fixed: exporting Prefab assets directly from Project Window wasn't working properly when ExportDisabled was off
+- fixed: regression with serialization and roundtrip behaviour of spotlights
+
+## [1.5.0-pre.2] - 2022-04-20
+- fixed: incorrect UV offset for tiled textures on export in some cases
+- feat: show exported glTF/GLB in explorer after exporting via Menu Item
+- feat: expose API for `GetAnimationId` for custom export logic
+
 ## [1.5.0-pre] - 2022-04-08
 
 - added: dialogue window will ask when meshes are not readable at runtime in the editor

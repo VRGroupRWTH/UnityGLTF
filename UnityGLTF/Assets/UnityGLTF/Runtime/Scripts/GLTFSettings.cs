@@ -74,7 +74,8 @@ namespace UnityGLTF
 		[SerializeField]
 		private bool exportNames = true;
 		[SerializeField]
-		private bool exportFullPath = true;
+		[Tooltip("If on, the entire texture path will be preserved. If off (default), textures are exported at root level.")]
+		private bool exportFullPath = false;
 		[SerializeField]
 		private bool requireExtensions = false;
 		[Header("Export Visibility")]
@@ -95,6 +96,9 @@ namespace UnityGLTF
 		[Header("Export Animation")]
 		[SerializeField]
 		private bool exportAnimations = true;
+		[Tooltip("(Experimental) Export animations using KHR_animation_pointer. Requires the viewer to also support this extension.")]
+		[SerializeField]
+		private bool useAnimationPointer = false;
 		[SerializeField]
 		[Tooltip("Some viewers can't distinguish between animation clips that have the same name. This option ensures all exported animation names are unique.")]
 		private bool uniqueAnimationNames = false;
@@ -105,9 +109,9 @@ namespace UnityGLTF
 		private BlendShapeExportPropertyFlags blendShapeExportProperties = BlendShapeExportPropertyFlags.All;
 		[SerializeField]
 		[Tooltip("(Experimental) Use Sparse Accessors for blend shape export. Not supported on some viewers.")]
-		private bool blendShapeExportSparseAccessors = false;
+		private bool blendShapeExportSparseAccessors = true;
 		[SerializeField]
-	    [Tooltip("Vertex Colors aren't supported in some viewers (e.g. Google's SceneViewer).")]
+	    [Tooltip("If off, vertex colors are not exported. Vertex Colors aren't supported in some viewers (e.g. Google's SceneViewer).")]
 		private bool exportVertexColors = true;
 
 		public bool ExportNames { get => exportNames;
@@ -229,6 +233,18 @@ namespace UnityGLTF
 			}
 		}
 
+		public bool UseAnimationPointer
+		{ get => useAnimationPointer;
+			set {
+				if(useAnimationPointer != value) {
+					useAnimationPointer = value;
+#if UNITY_EDITOR
+					EditorUtility.SetDirty(this);
+#endif
+				}
+			}
+		}
+
 		public bool UniqueAnimationNames
 		{ get => uniqueAnimationNames;
 			set {
@@ -294,7 +310,8 @@ namespace UnityGLTF
 		    {
 #if UNITY_EDITOR
 			    settings = ScriptableObject.CreateInstance<GLTFSettings>();
-			    if (!Directory.Exists(k_RuntimeAndEditorSettingsPath)) Directory.CreateDirectory(k_RuntimeAndEditorSettingsPath);
+			    var dir = Path.GetDirectoryName(k_RuntimeAndEditorSettingsPath);
+			    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 			    AssetDatabase.CreateAsset(settings, k_RuntimeAndEditorSettingsPath);
 			    AssetDatabase.SaveAssets();
 #else
