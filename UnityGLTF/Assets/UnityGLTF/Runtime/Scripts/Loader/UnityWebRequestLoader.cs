@@ -9,7 +9,7 @@ namespace UnityGLTF.Loader
 	{
 		private string dir;
 		private string password;
-		private string username
+		private string username;
 
 		public UnityWebRequestLoader(string dir)
 		{
