@@ -2,7 +2,6 @@
 using System.IO;
 using System.Text.RegularExpressions;
 using GLTF.Schema;
-using GLTF.Math;
 using System.Linq;
 
 namespace GLTF
@@ -221,6 +220,29 @@ namespace GLTF
 			}
 		}
 
+		private static void ApplySparseAccessorsVec3(ref NumericArray resultArray, AttributeAccessor attributeAccessor, AttributeAccessor sparseValues, AttributeAccessor sparseIndices)
+		{
+			var sparseArrays = new NumericArray[2];
+
+			// Values
+			uint offset1 = LoadBufferView(sparseValues.AccessorId.Value.Sparse.Values.BufferView.Value, sparseValues.Offset, sparseValues.Stream, out byte[] bufferViewCache1);
+
+			// Indices
+			uint offset2 = LoadBufferView(sparseIndices.AccessorId.Value.Sparse.Indices.BufferView.Value, sparseIndices.Offset, sparseIndices.Stream, out byte[] bufferViewCache2);
+
+			Accessor.AsSparseVector3Array(attributeAccessor.AccessorId.Value, ref sparseArrays[0], bufferViewCache1, offset1);
+			Accessor.AsSparseUIntArray(attributeAccessor.AccessorId.Value, ref sparseArrays[1], bufferViewCache2, offset2);
+
+			var before = new NumericArray();
+			before.AsVec3s = new GLTF.Math.Vector3[resultArray.AsVec3s.Length];
+			System.Array.Copy(resultArray.AsVec3s, before.AsVec3s, before.AsVec3s.Length);
+
+			for (int j = 0; j < sparseArrays[1].AsUInts.Length; j++)
+				before.AsVec3s[sparseArrays[1].AsUInts[j]] = sparseArrays[0].AsVec3s[j];
+
+			resultArray = before;
+		}
+
 		/// <summary>
 		/// Uses the accessor to parse the buffer into attributes needed to construct the mesh primitive
 		/// </summary>
@@ -229,7 +251,7 @@ namespace GLTF
 		/// Uses the accessor to parse the buffer into attributes needed to construct the mesh primitive
 		/// </summary>
 		/// <param name="attributes">A dictionary that contains a mapping of attribute name to data needed to parse</param>
-		public static void BuildMeshAttributes(ref Dictionary<string, AttributeAccessor> attributes)
+		public static void BuildMeshAttributes(ref Dictionary<string, AttributeAccessor> attributes, ref Dictionary<string, (AttributeAccessor sparseIndices, AttributeAccessor sparseValues)> sparseAccessors)
 		{
 			if (attributes.ContainsKey(SemanticProperties.POSITION))
 			{
@@ -237,6 +259,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsVertexArray(ref resultArray, bufferViewCache, offset);
+
+				if (sparseAccessors.TryGetValue(SemanticProperties.POSITION, out var sparseData))
+					ApplySparseAccessorsVec3(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.INDICES))
@@ -253,6 +279,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsNormalArray(ref resultArray, bufferViewCache, offset);
+
+				if (sparseAccessors.TryGetValue(SemanticProperties.NORMAL, out var sparseData))
+					ApplySparseAccessorsVec3(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.TexCoord[0]))
@@ -261,6 +291,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsTexcoordArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.TexCoord[0], out var sparseData))
+				// 	ApplySparseAccessorsTexCoord(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.TexCoord[1]))
@@ -269,6 +303,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsTexcoordArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.TexCoord[1], out var sparseData))
+				// 	ApplySparseAccessorsTexCoord(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.TexCoord[2]))
@@ -277,6 +315,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsTexcoordArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.TexCoord[2], out var sparseData))
+				// 	ApplySparseAccessorsTexCoord(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.TexCoord[3]))
@@ -285,6 +327,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsTexcoordArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.TexCoord[3], out var sparseData))
+				// 	ApplySparseAccessorsTexCoord(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.Color[0]))
@@ -293,6 +339,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsColorArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.Color[0], out var sparseData))
+				// 	ApplySparseAccessorsColor(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.TANGENT))
@@ -301,6 +351,10 @@ namespace GLTF
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsTangentArray(ref resultArray, bufferViewCache, offset);
+
+				// if (sparseAccessors.TryGetValue(SemanticProperties.TANGENT, out var sparseData))
+				// 	ApplySparseAccessorsTangent(ref resultArray, attributeAccessor, sparseData.sparseValues, sparseData.sparseIndices);
+
 				attributeAccessor.AccessorContent = resultArray;
 			}
 			if (attributes.ContainsKey(SemanticProperties.Weight[0]))
@@ -311,9 +365,25 @@ namespace GLTF
 				attributeAccessor.AccessorId.Value.AsVector4Array(ref resultArray, bufferViewCache, offset);
 				attributeAccessor.AccessorContent = resultArray;
 			}
+			if (attributes.ContainsKey(SemanticProperties.Weight[1]))
+			{
+				var attributeAccessor = attributes[SemanticProperties.Weight[1]];
+				NumericArray resultArray = attributeAccessor.AccessorContent;
+				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
+				attributeAccessor.AccessorId.Value.AsVector4Array(ref resultArray, bufferViewCache, offset);
+				attributeAccessor.AccessorContent = resultArray;
+			}
 			if (attributes.ContainsKey(SemanticProperties.Joint[0]))
 			{
 				var attributeAccessor = attributes[SemanticProperties.Joint[0]];
+				NumericArray resultArray = attributeAccessor.AccessorContent;
+				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
+				attributeAccessor.AccessorId.Value.AsVector4Array(ref resultArray, bufferViewCache, offset);
+				attributeAccessor.AccessorContent = resultArray;
+			}
+			if (attributes.ContainsKey(SemanticProperties.Joint[1]))
+			{
+				var attributeAccessor = attributes[SemanticProperties.Joint[1]];
 				NumericArray resultArray = attributeAccessor.AccessorContent;
 				uint offset = LoadBufferView(attributeAccessor, out byte[] bufferViewCache);
 				attributeAccessor.AccessorId.Value.AsVector4Array(ref resultArray, bufferViewCache, offset);
@@ -411,7 +481,7 @@ namespace GLTF
 				PreviousTextureCount = mergeToRoot.Textures?.Count ?? 0
 			};
 
-			GLTFRoot mergeFromRootCopy = new GLTFRoot(mergeFromRoot); 
+			GLTFRoot mergeFromRootCopy = new GLTFRoot(mergeFromRoot);
 
 			// for each type:
 			// 1) add the right hand range to the left hand object
@@ -428,7 +498,7 @@ namespace GLTF
 
 			// merge meshes
 			MergeMeshes(mergeToRoot, mergeFromRootCopy, previousGLTFSize);
-			
+
 			// merge cameras
 			MergeCameras(mergeToRoot, mergeFromRootCopy);
 
@@ -441,7 +511,7 @@ namespace GLTF
 			// merge scenes
 			MergeScenes(mergeToRoot, mergeFromRootCopy, previousGLTFSize);
 		}
-		
+
 		/// <summary>
 		/// Returns whether the input string is a Base64 uri. Images and buffers can both be encoded this way.
 		/// </summary>
@@ -457,12 +527,17 @@ namespace GLTF
 
 		private static uint LoadBufferView(AttributeAccessor attributeAccessor, out byte[] bufferViewCache)
 		{
-			BufferView bufferView = attributeAccessor.AccessorId.Value.BufferView.Value;
-			uint totalOffset = bufferView.ByteOffset + attributeAccessor.Offset;
+			return LoadBufferView(attributeAccessor.AccessorId.Value.BufferView.Value, attributeAccessor.Offset, attributeAccessor.Stream, out bufferViewCache);
+		}
+
+		internal static uint LoadBufferView(BufferView bufferView, uint Offset, Stream Stream, out byte[] bufferViewCache)
+		{
+			uint totalOffset = bufferView.ByteOffset + Offset;
+
 #if !NETFX_CORE
-			if (attributeAccessor.Stream is System.IO.MemoryStream)
+			if (Stream is System.IO.MemoryStream)
 			{
-				MemoryStream memoryStream = (MemoryStream)attributeAccessor.Stream;
+				MemoryStream memoryStream = (MemoryStream)Stream;
 #if NETFX_CORE || NETSTANDARD1_3
 				if (memoryStream.TryGetBuffer(out System.ArraySegment<byte> arraySegment))
 				{
@@ -475,7 +550,7 @@ namespace GLTF
 #endif
 			}
 #endif
-			attributeAccessor.Stream.Position = totalOffset;
+			Stream.Position = totalOffset;
 			bufferViewCache = new byte[bufferView.ByteLength];
 
 			// stream.Read only accepts int for length
@@ -483,7 +558,7 @@ namespace GLTF
 			while (remainingSize != 0)
 			{
 				int sizeToLoad = (int)System.Math.Min(remainingSize, int.MaxValue);
-				attributeAccessor.Stream.Read(bufferViewCache, (int)(bufferView.ByteLength - remainingSize), sizeToLoad);
+				sizeToLoad = Stream.Read(bufferViewCache, (int)(bufferView.ByteLength - remainingSize), sizeToLoad);
 				remainingSize -= (uint)sizeToLoad;
 			}
 			return 0;
@@ -669,7 +744,7 @@ namespace GLTF
 				{
 					mergeToRoot.Materials = new List<GLTFMaterial>(mergeFromRoot.Materials.Count);
 				}
-				
+
 				mergeToRoot.Materials.AddRange(mergeFromRoot.Materials);
 				for (int i = previousGLTFSizes.PreviousMaterialCount; i < mergeToRoot.Materials.Count; ++i)
 				{
@@ -727,7 +802,7 @@ namespace GLTF
 		private static void MergeMeshes(GLTFRoot mergeToRoot, GLTFRoot mergeFromRoot, PreviousGLTFSizes previousGLTFSizes)
 		{
 			if (mergeFromRoot.Meshes == null) return;
-			
+
 			if (mergeToRoot.Meshes == null)
 			{
 				mergeToRoot.Meshes = new List<GLTFMesh>(mergeFromRoot.Meshes.Count);

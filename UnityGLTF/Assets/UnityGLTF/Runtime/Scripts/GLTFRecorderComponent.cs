@@ -1,6 +1,13 @@
+#if ENABLE_INPUT_SYSTEM && HAVE_INPUTSYSTEM
+#define NEW_INPUT
+#endif
+
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
+#if NEW_INPUT
+using UnityEngine.InputSystem;
+#endif
 using UnityGLTF.Timeline;
 
 namespace UnityGLTF
@@ -11,7 +18,12 @@ namespace UnityGLTF
 	    public Transform exportRoot;
 	    public bool recordBlendShapes = true;
 	    public bool recordAnimationPointer = true;
+
+#if NEW_INPUT
+		public InputAction recordingKey = new InputAction(binding: "<Keyboard>/F11");
+#else
 	    public KeyCode recordingKey = KeyCode.F11;
+#endif
 
 	    public bool IsRecording => recorder?.IsRecording ?? false;
 	    protected GLTFRecorder recorder;
@@ -61,12 +73,6 @@ namespace UnityGLTF
 			recordingEnded?.Invoke(filename);
 		}
 
-		protected virtual void Update()
-		{
-			if(Input.GetKeyDown(recordingKey))
-				ToggleRecording();
-		}
-
 		private void ToggleRecording()
 	    {
             if (!exportRoot || string.IsNullOrEmpty(outputFile))
@@ -86,10 +92,31 @@ namespace UnityGLTF
             }
 	    }
 
-	    protected virtual void OnDisable()
+#if NEW_INPUT
+		private void Start()
+		{
+			recordingKey.performed += _ => ToggleRecording();
+		}
+
+		private void OnEnable()
+		{
+			recordingKey.Enable();
+		}
+#else
+		protected virtual void Update()
+		{
+			if(Input.GetKeyDown(recordingKey))
+				ToggleRecording();
+		}
+#endif
+
+		protected virtual void OnDisable()
 	    {
 		    if(IsRecording)
 			    StopRecording();
+#if NEW_INPUT
+		    recordingKey.Disable();
+#endif
 	    }
 
 	    protected virtual void UpdateRecording()

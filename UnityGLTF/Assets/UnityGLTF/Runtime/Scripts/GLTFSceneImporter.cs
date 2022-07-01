@@ -1,5 +1,4 @@
 ﻿using GLTF;
-using GLTF.Extensions;
 using GLTF.Schema;
 using GLTF.Utilities;
 using System;
@@ -42,6 +41,14 @@ namespace UnityGLTF
 		public IDataLoader DataLoader = null;
 		public AsyncCoroutineHelper AsyncCoroutineHelper = null;
 		public bool ThrowOnLowMemory = true;
+		public AnimationMethod AnimationMethod = AnimationMethod.Mecanim;
+	}
+
+	public enum AnimationMethod
+	{
+		None,
+		Legacy,
+		Mecanim
 	}
 
 	public class UnityMeshData
@@ -292,6 +299,8 @@ namespace UnityGLTF
 		{
 			get { return _lastLoadedScene; }
 		}
+
+		public TextureCacheData[] TextureCache => _assetCache.TextureCache;
 
 		/// <summary>
 		/// Loads a glTF Scene into the LastLoadedScene field
@@ -799,6 +808,16 @@ namespace UnityGLTF
 
 		protected virtual async Task ConstructUnityTexture(Stream stream, bool markGpuOnly, bool isLinear, GLTFImage image, int imageCacheIndex)
 		{
+#if UNITY_EDITOR
+			if (stream is AssetDatabaseStream assetDatabaseStream)
+			{
+				var tx = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetDatabaseStream.AssetUri);
+				progressStatus.TextureLoaded++;
+				progress?.Report(progressStatus);
+				_assetCache.ImageCache[imageCacheIndex] = tx;
+				return;
+			}
+#endif
 			Texture2D texture = new Texture2D(0, 0, TextureFormat.RGBA32, GenerateMipMapsForTextures, isLinear);
 			texture.name = string.IsNullOrEmpty(image.Name) ? Path.GetFileNameWithoutExtension(image.Uri) : image.Name;
 
@@ -848,10 +867,27 @@ namespace UnityGLTF
 				var target = primitive.Targets[i];
 				newTargets.Add(new Dictionary<string, AttributeAccessor>());
 
-				//NORMALS, POSITIONS, TANGENTS
+				NumericArray[] sparseNormals = null;
+				NumericArray[] sparsePositions = null;
+				NumericArray[] sparseTangents = null;
+
+				const string NormalKey = "NORMALS";
+				const string PositionKey = "POSITIONS";
+				const string TangentKey = "TANGENTS";
+
+				// normals, positions, tangents
 				foreach (var targetAttribute in target)
 				{
-					BufferId bufferIdPair = targetAttribute.Value.Value.BufferView.Value.Buffer;
+					BufferId bufferIdPair = null;
+					if (targetAttribute.Value.Value.Sparse == null)
+					{
+						bufferIdPair = targetAttribute.Value.Value.BufferView.Value.Buffer;
+					}
+					else
+					{
+						bufferIdPair = primitive.Attributes[targetAttribute.Key].Value.BufferView.Value.Buffer;
+						targetAttribute.Value.Value.BufferView = primitive.Attributes[targetAttribute.Key].Value.BufferView;
+					}
 					GLTFBuffer buffer = bufferIdPair.Value;
 					int bufferID = bufferIdPair.Id;
 
@@ -867,10 +903,93 @@ namespace UnityGLTF
 						Offset = (uint)_assetCache.BufferCache[bufferID].ChunkOffset
 					};
 
+					// if this buffer isn't sparse, we're done here
+					if (targetAttribute.Value.Value.Sparse == null) continue;
+
+					// Values
+					var bufferId = targetAttribute.Value.Value.Sparse.Values.BufferView.Value.Buffer;
+					var bufferData = await GetBufferData(bufferId);
+					AttributeAccessor sparseValues = new AttributeAccessor
+					{
+						AccessorId = targetAttribute.Value,
+						Stream = bufferData.Stream,
+						Offset = (uint)bufferData.ChunkOffset
+					};
+					uint offset1 = GLTFHelpers.LoadBufferView(sparseValues.AccessorId.Value.Sparse.Values.BufferView.Value, sparseValues.Offset, sparseValues.Stream, out byte[] bufferViewCache1);
+
+					// Indices
+					bufferId = targetAttribute.Value.Value.Sparse.Indices.BufferView.Value.Buffer;
+					bufferData = await GetBufferData(bufferId);
+					AttributeAccessor sparseIndices = new AttributeAccessor
+					{
+						AccessorId = targetAttribute.Value,
+						Stream = bufferData.Stream,
+						Offset = (uint)bufferData.ChunkOffset
+					};
+					uint offset2 = GLTFHelpers.LoadBufferView(sparseIndices.AccessorId.Value.Sparse.Indices.BufferView.Value, sparseIndices.Offset, sparseIndices.Stream, out byte[] bufferViewCache2);
+
+					switch (targetAttribute.Key)
+					{
+						case NormalKey:
+							sparseNormals = new NumericArray[2];
+							Accessor.AsSparseVector3Array(targetAttribute.Value.Value, ref sparseNormals[0], bufferViewCache1, offset1);
+							Accessor.AsSparseUIntArray(targetAttribute.Value.Value, ref sparseNormals[1], bufferViewCache2, offset2);
+							break;
+						case PositionKey:
+							sparsePositions = new NumericArray[2];
+							Accessor.AsSparseVector3Array(targetAttribute.Value.Value, ref sparsePositions[0], bufferViewCache1, offset1);
+							Accessor.AsSparseUIntArray(targetAttribute.Value.Value, ref sparsePositions[1], bufferViewCache2, offset2);
+							break;
+						case TangentKey:
+							sparseTangents = new NumericArray[2];
+							Accessor.AsSparseVector3Array(targetAttribute.Value.Value, ref sparseTangents[0], bufferViewCache1, offset1);
+							Accessor.AsSparseUIntArray(targetAttribute.Value.Value, ref sparseTangents[1], bufferViewCache2, offset2);
+							break;
+					}
 				}
 
 				var att = newTargets[i];
 				GLTFHelpers.BuildTargetAttributes(ref att);
+
+				if (sparseNormals != null)
+				{
+					var current = att[NormalKey].AccessorContent;
+					NumericArray before = new NumericArray();
+					before.AsVec3s = new GLTF.Math.Vector3[current.AsVec3s.Length];
+					Array.Copy(current.AsVec3s, before.AsVec3s, before.AsVec3s.Length);
+					for (int j = 0; j < sparseNormals[1].AsUInts.Length; j++)
+					{
+						before.AsVec3s[sparseNormals[1].AsUInts[j]] = sparseNormals[0].AsVec3s[j];
+					}
+					att[NormalKey].AccessorContent = before;
+				}
+
+				if (sparsePositions != null)
+				{
+					var current = att[PositionKey].AccessorContent;
+					NumericArray before = new NumericArray();
+					before.AsVec3s = new GLTF.Math.Vector3[current.AsVec3s.Length];
+					Array.Copy(current.AsVec3s, before.AsVec3s, before.AsVec3s.Length);
+					for (int j = 0; j < sparsePositions[1].AsUInts.Length; j++)
+					{
+						before.AsVec3s[sparsePositions[1].AsUInts[j]] = sparsePositions[0].AsVec3s[j];
+					}
+					att[PositionKey].AccessorContent = before;
+				}
+
+				if (sparseTangents != null)
+				{
+					var current = att[TangentKey].AccessorContent;
+					NumericArray before = new NumericArray();
+					before.AsVec3s = new GLTF.Math.Vector3[current.AsVec3s.Length];
+					Array.Copy(current.AsVec3s, before.AsVec3s, before.AsVec3s.Length);
+					for (int j = 0; j < sparseTangents[1].AsUInts.Length; j++)
+					{
+						before.AsVec3s[sparseTangents[1].AsUInts[j]] = sparseTangents[0].AsVec3s[j];
+					}
+					att[TangentKey].AccessorContent = before;
+				}
+
 				TransformTargets(ref att);
 			}
 		}
@@ -903,6 +1022,7 @@ namespace UnityGLTF
 			_assetCache.MeshCache[meshIndex].Primitives.Add(primData);
 
 			var attributeAccessors = primData.Attributes;
+			var sparseAccessors = new Dictionary<string, (AttributeAccessor sparseIndices, AttributeAccessor sparseValues)>();
 			foreach (var attributePair in primitive.Attributes)
 			{
 				var bufferId = attributePair.Value.Value.BufferView.Value.Buffer;
@@ -914,6 +1034,30 @@ namespace UnityGLTF
 					Stream = bufferData.Stream,
 					Offset = (uint)bufferData.ChunkOffset
 				};
+
+				var sparse = attributePair.Value.Value.Sparse;
+				if (sparse != null)
+				{
+					var sparseBufferId = sparse.Values.BufferView.Value.Buffer;
+					var sparseBufferData = await GetBufferData(sparseBufferId);
+					AttributeAccessor sparseValues = new AttributeAccessor
+					{
+						AccessorId = attributePair.Value,
+						Stream = sparseBufferData.Stream,
+						Offset = (uint)sparseBufferData.ChunkOffset
+					};
+
+					var sparseIndicesBufferId = sparse.Indices.BufferView.Value.Buffer;
+					var sparseIndicesBufferData = await GetBufferData(sparseIndicesBufferId);
+					AttributeAccessor sparseIndices = new AttributeAccessor
+					{
+						AccessorId = attributePair.Value,
+						Stream = sparseIndicesBufferData.Stream,
+						Offset = (uint)sparseIndicesBufferData.ChunkOffset
+					};
+
+					sparseAccessors[attributePair.Key] = (sparseIndices, sparseValues);
+				}
 			}
 
 			if (primitive.Indices != null)
@@ -930,7 +1074,7 @@ namespace UnityGLTF
 			}
 			try
 			{
-				GLTFHelpers.BuildMeshAttributes(ref attributeAccessors);
+				GLTFHelpers.BuildMeshAttributes(ref attributeAccessors, ref sparseAccessors);
 			}
 			catch (GLTFLoadException e)
 			{
@@ -1186,8 +1330,8 @@ namespace UnityGLTF
 			};
 			_assetCache.AnimationCache[animationId].LoadedAnimationClip = clip;
 
-			// needed because Animator component is unavailable at runtime
-			clip.legacy = true;
+			if (_options.AnimationMethod == AnimationMethod.Legacy)
+				clip.legacy = true;
 
 			foreach (AnimationChannel channel in animation.Channels)
 			{
@@ -1293,26 +1437,57 @@ namespace UnityGLTF
 					nodeTransforms[i] = nodeObj.transform;
 				}
 
-				if (_gltfRoot.Animations != null && _gltfRoot.Animations.Count > 0)
+				if (_options.AnimationMethod != AnimationMethod.None)
 				{
-#if UNITY_ANIMATION
-					// create the AnimationClip that will contain animation data
-					Animation animation = sceneObj.AddComponent<Animation>();
-					for (int i = 0; i < _gltfRoot.Animations.Count; ++i)
+					if (_gltfRoot.Animations != null && _gltfRoot.Animations.Count > 0)
 					{
-						AnimationClip clip = await ConstructClip(sceneObj.transform, i, cancellationToken);
-
-						clip.wrapMode = WrapMode.Loop;
-
-						animation.AddClip(clip, clip.name);
-						if (i == 0)
+	#if UNITY_ANIMATION
+						// create the AnimationClip that will contain animation data
+						var constructedClips = new List<AnimationClip>();
+						for (int i = 0; i < _gltfRoot.Animations.Count; ++i)
 						{
-							animation.clip = clip;
+							AnimationClip clip = await ConstructClip(sceneObj.transform, i, cancellationToken);
+
+							clip.wrapMode = WrapMode.Loop;
+							constructedClips.Add(clip);
 						}
-					}
+
+						if (_options.AnimationMethod == AnimationMethod.Legacy)
+						{
+							Animation animation = sceneObj.AddComponent<Animation>();
+							for (int i = 0; i < constructedClips.Count; i++)
+							{
+								var clip = constructedClips[i];
+								animation.AddClip(clip, clip.name);
+								if (i == 0)
+								{
+									animation.clip = clip;
+								}
+							}
+						}
+						else if (_options.AnimationMethod == AnimationMethod.Mecanim)
+						{
+							Animator animator = sceneObj.AddComponent<Animator>();
+#if UNITY_EDITOR
+							// TODO there's no good way to construct an AnimatorController on import it seems, needs to be a SubAsset etc.
+							var controller = new UnityEditor.Animations.AnimatorController();
+							controller.name = "AnimatorController";
+							controller.AddLayer("Base Layer");
+							var baseLayer = controller.layers[0];
+							for (int i = 0; i < constructedClips.Count; i++)
+							{
+								var state = baseLayer.stateMachine.AddState(constructedClips[i].name);
+								state.motion = constructedClips[i];
+							}
+							animator.runtimeAnimatorController = controller;
 #else
-					Debug.LogWarning("glTF scene contains animations but com.unity.modules.animation isn't installed. Install that module to import animations.");
+							Debug.LogWarning("Importing animations at runtime requires the Legacy AnimationMethod to be enabled, or custom handling of the resulting clips.", animator);
 #endif
+						}
+#else
+						Debug.LogWarning("glTF scene contains animations but com.unity.modules.animation isn't installed. Install that module to import animations.");
+	#endif
+					}
 				}
 
 				CreatedObject = sceneObj;
@@ -2143,6 +2318,8 @@ namespace UnityGLTF
 			mapper.AlphaMode = def.AlphaMode;
 			mapper.AlphaCutoff = def.AlphaCutoff;
 			mapper.DoubleSided = def.DoubleSided;
+			mapper.Material.SetFloat("_BUILTIN_QueueControl", -1);
+			mapper.Material.SetFloat("_QueueControl", -1);
 
 			var mrMapper = mapper as IMetalRoughUniformMap;
 			if (def.PbrMetallicRoughness != null && mrMapper != null)
@@ -2161,10 +2338,14 @@ namespace UnityGLTF
 					var ext = GetTextureTransform(pbr.BaseColorTexture);
 					if (ext != null)
 					{
-						mrMapper.BaseColorXOffset = ext.Offset.ToUnityVector2Raw();
+						var offset = ext.Offset.ToUnityVector2Raw();
+						offset.y = 1 - ext.Scale.Y - offset.y;
+						mrMapper.BaseColorXOffset = offset;
 						mrMapper.BaseColorXRotation = ext.Rotation;
 						mrMapper.BaseColorXScale = ext.Scale.ToUnityVector2Raw();
 						mrMapper.BaseColorXTexCoord = ext.TexCoord;
+
+						mapper.Material.SetKeyword("_TEXTURE_TRANSFORM", true);
 					}
 				}
 
@@ -2278,11 +2459,8 @@ namespace UnityGLTF
 					var td = await FromTextureInfo(transmission.transmissionTexture);
 					transmissionMapper.TransmissionTexture = td.Texture;
 
-					if (transmissionMapper.TransmissionFactor > 0)
-					{
-						mapper.Material.renderQueue = 3000;
-						mapper.Material.EnableKeyword("_VOLUME_TRANSMISSION_ON");
-					}
+					mapper.Material.renderQueue = 3000;
+					mapper.Material.SetKeyword("_VOLUME_TRANSMISSION", true);
 				}
 			}
 
@@ -2298,11 +2476,8 @@ namespace UnityGLTF
 					var td = await FromTextureInfo(volume.thicknessTexture);
 					volumeMapper.ThicknessTexture = td.Texture;
 
-					if (volumeMapper.ThicknessFactor > 0)
-					{
-						mapper.Material.renderQueue = 3000;
-						mapper.Material.EnableKeyword("_VOLUME_TRANSMISSION_ON");
-					}
+					mapper.Material.renderQueue = 3000;
+					mapper.Material.SetKeyword("_VOLUME_TRANSMISSION", true);
 				}
 			}
 
@@ -2321,10 +2496,7 @@ namespace UnityGLTF
 					var td2 = await FromTextureInfo(iridescence.iridescenceThicknessTexture);
 					iridescenceMapper.IridescenceThicknessTexture = td2.Texture;
 
-					if (iridescenceMapper.IridescenceFactor > 0)
-					{
-						mapper.Material.EnableKeyword("_IRIDESCENCE_ON");
-					}
+					mapper.Material.SetKeyword("_IRIDESCENCE", true);
 				}
 			}
 
@@ -2341,10 +2513,7 @@ namespace UnityGLTF
 					var td2 = await FromTextureInfo(specular.specularColorTexture);
 					specularMapper.SpecularColorTexture = td2.Texture;
 
-					if (specularMapper.SpecularFactor > 0)
-					{
-						mapper.Material.EnableKeyword("_SPECULAR_ON");
-					}
+					mapper.Material.SetKeyword("_SPECULAR", true);
 				}
 			}
 
@@ -2372,14 +2541,20 @@ namespace UnityGLTF
 				TextureId textureId = def.OcclusionTexture.Index;
 				await ConstructTexture(textureId.Value, textureId.Id, !KeepCPUCopyOfTexture, true);
 				mapper.OcclusionTexture = _assetCache.TextureCache[textureId.Id].Texture;
+				mapper.OcclusionTexCoord = def.OcclusionTexture.TexCoord;
 
 				var ext = GetTextureTransform(def.OcclusionTexture);
+
 				if (ext != null)
 				{
-					mapper.OcclusionXOffset = ext.Offset.ToUnityVector2Raw();
+					var offset = ext.Offset.ToUnityVector2Raw();
+					offset.y = 1 - ext.Scale.Y - offset.y;
+					mapper.OcclusionXOffset = offset;
 					mapper.OcclusionXRotation = ext.Rotation;
 					mapper.OcclusionXScale = ext.Scale.ToUnityVector2Raw();
-					mapper.OcclusionXTexCoord = ext.TexCoord;
+					// mapper.OcclusionXTexCoord = ext.TexCoord;
+
+					mapper.Material.SetKeyword("_TEXTURE_TRANSFORM", true);
 				}
 			}
 
@@ -2411,10 +2586,10 @@ namespace UnityGLTF
 			var vertColorMapper = mapper.Clone();
 			vertColorMapper.VertexColorsEnabled = true;
 
-			if (mapper is PBRGraphMap pbrGraphMap)
-			{
-				MaterialExtensions.ValidateMaterialKeywords(pbrGraphMap.Material);
-			}
+			// if (mapper is PBRGraphMap pbrGraphMap)
+			// {
+			// 	MaterialExtensions.ValidateMaterialKeywords(pbrGraphMap.Material);
+			// }
 
 			MaterialCacheData materialWrapper = new MaterialCacheData
 			{
@@ -2432,7 +2607,6 @@ namespace UnityGLTF
 				_defaultLoadedMaterial = materialWrapper;
 			}
 		}
-
 
 		protected virtual int GetTextureSourceId(GLTFTexture texture)
 		{
@@ -2586,6 +2760,9 @@ namespace UnityGLTF
 					}
 				}
 				else
+#if UNITY_EDITOR
+				if (!UnityEditor.AssetDatabase.Contains(source))
+#endif
 				{
 					var unityTexture = Object.Instantiate(source);
 					unityTexture.name = string.IsNullOrEmpty(image.Name) ? Path.GetFileNameWithoutExtension(image.Uri) : image.Name;
@@ -2596,7 +2773,18 @@ namespace UnityGLTF
 					Debug.Assert(_assetCache.TextureCache[textureIndex].Texture == null, "Texture should not be reset to prevent memory leaks");
 					_assetCache.TextureCache[textureIndex].Texture = unityTexture;
 				}
+#if UNITY_EDITOR
+				else
+				{
+					// don't warn for just filter mode, user choice
+					if (source.wrapModeU != desiredWrapModeS || source.wrapModeV != desiredWrapModeT)
+						Debug.LogWarning(($"Sampler state doesn't match but source texture is non-readable. Results might not be correct if textures are used multiple times with different sampler states. {source.filterMode} == {desiredFilterMode} && {source.wrapModeU} == {desiredWrapModeS} && {source.wrapModeV} == {desiredWrapModeT}"));
+					_assetCache.TextureCache[textureIndex].Texture = source;
+				}
+#endif
 			}
+
+			_assetCache.TextureCache[textureIndex].IsLinear = isLinear;
 		}
 
 		protected virtual void ConstructImageFromGLB(GLTFImage image, int imageCacheIndex)
@@ -2809,6 +2997,45 @@ namespace UnityGLTF
 					_isRunning = false;
 				}
 			}
+		}
+
+#if UNITY_EDITOR
+		internal class AssetDatabaseStream : Stream
+		{
+			public string AssetUri { get; }
+
+			public AssetDatabaseStream(string imageUri)
+			{
+				AssetUri = imageUri;
+			}
+
+			public override void Flush() => throw new NotImplementedException();
+			public override int Read(byte[] buffer, int offset, int count) => throw new NotImplementedException();
+			public override long Seek(long offset, SeekOrigin origin) => throw new NotImplementedException();
+			public override void SetLength(long value) => throw new NotImplementedException();
+			public override void Write(byte[] buffer, int offset, int count) => throw new NotImplementedException();
+
+			public override bool CanRead { get; }
+			public override bool CanSeek { get; }
+			public override bool CanWrite { get; }
+			public override long Length { get; }
+			public override long Position { get; set; }
+		}
+#endif
+	}
+
+
+	internal static class MatExt
+	{
+		internal static void SetKeyword(this Material material, string keyword, bool state)
+		{
+			if (state)
+				material.EnableKeyword(keyword + "_ON");
+			else
+				material.DisableKeyword(keyword + "_ON");
+
+			if (material.HasProperty(keyword))
+				material.SetFloat(keyword, state ? 1 : 0);
 		}
 	}
 }

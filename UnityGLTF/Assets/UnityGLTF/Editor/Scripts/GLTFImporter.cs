@@ -25,6 +25,7 @@ using Object = UnityEngine.Object;
 using UnityGLTF.Loader;
 using GLTF.Schema;
 using GLTF;
+using Unity.Collections;
 #if UNITY_2020_2_OR_NEWER
 using UnityEditor.AssetImporters;
 #else
@@ -35,15 +36,25 @@ namespace UnityGLTF
 {
 #if UNITY_2020_2_OR_NEWER
 #if ENABLE_DEFAULT_GLB_IMPORTER
-    [ScriptedImporter(2, new[] { "glb", "gltf" })]
+    [ScriptedImporter(3, new[] { "glb", "gltf" })]
 #else
-    [ScriptedImporter(2, null, overrideExts: new[] { "glb", "gltf" })]
+    [ScriptedImporter(3, null, overrideExts: new[] { "glb", "gltf" })]
 #endif
 #else
-	[ScriptedImporter(2, new[] { "glb" })]
+	[ScriptedImporter(3, new[] { "glb" })]
 #endif
     public class GLTFImporter : ScriptedImporter
     {
+	    private static string[] GatherDependenciesFromSourceFile(string path)
+	    {
+		    const string PackagePrefix = "Packages/org.khronos.unitygltf/";
+		    return new string[] {
+			    PackagePrefix + "Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph",
+			    PackagePrefix + "Runtime/Shaders/PbrMetallicRoughness.shader",
+			    PackagePrefix + "Runtime/Shaders/Unlit.shader",
+		    };
+	    }
+
 	    [Tooltip("Turn this off to create an explicit GameObject for the glTF scene. A scene root will always be created if there's more than one root node.")]
         [SerializeField] private bool _removeEmptyRootObjects = true;
         [SerializeField] private float _scaleFactor = 1.0f;
@@ -53,8 +64,33 @@ namespace UnityGLTF
         [SerializeField] private bool _swapUvs = false;
         [SerializeField] private bool _generateLightmapUVs = false;
         [SerializeField] private GLTFImporterNormals _importNormals = GLTFImporterNormals.Import;
+        [SerializeField] private AnimationMethod _importAnimations = AnimationMethod.Mecanim;
         [SerializeField] private bool _importMaterials = true;
-        // [SerializeField] private bool _useJpgTextures = false;
+
+        [Serializable]
+        internal class ExtensionInfo
+        {
+	        public string name;
+	        public bool supported;
+	        public bool used;
+	        public bool required;
+        }
+
+        [Serializable]
+        public class TextureInfo
+        {
+	        public Texture2D texture;
+	        public bool shouldBeLinear;
+        }
+
+#if !UNIYT_2020_2_OR_NEWER
+	    private class NonReorderableAttribute : Attribute {}
+#endif
+
+        // Import messages (extensions, warnings, errors, ...)
+        [NonReorderable] [SerializeField] private List<ExtensionInfo> _extensions;
+        [NonReorderable] [SerializeField] private List<TextureInfo> _textures;
+        internal List<TextureInfo> Textures => _textures;
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
@@ -173,6 +209,22 @@ namespace UnityGLTF
 	                ctx.AddObjectToAsset(GetUniqueName(clip.name), clip);
                 }
 
+                var animators = gltfScene.GetComponentsInChildren<Animator>();
+                var clips2 = animators.SelectMany(x => AnimationUtility.GetAnimationClips(x.gameObject));
+                foreach (var clip in clips2)
+                {
+	                ctx.AddObjectToAsset(GetUniqueName(clip.name), clip);
+                }
+                // we can't add the Animators as subassets here, since they require their state machines to be direct subassets themselves.
+                // foreach (var anim in animators)
+                // {
+	            //     ctx.AddObjectToAsset(GetUniqueName(anim.runtimeAnimatorController.name), anim.runtimeAnimatorController as AnimatorController);
+	            //     foreach (var layer in (anim.runtimeAnimatorController as AnimatorController).layers)
+	            //     {
+		        //         ctx.AddObjectToAsset(GetUniqueName(layer.name + "-state"), layer.stateMachine);
+	            //     }
+                // }
+
                 var renderers = gltfScene.GetComponentsInChildren<Renderer>();
 
                 if (_importMaterials)
@@ -190,9 +242,6 @@ namespace UnityGLTF
                                 {
                                     matName = matName.Substring(Mathf.Min(matName.LastIndexOf("/", StringComparison.Ordinal) + 1, matName.Length - 1));
                                 }
-
-                                // Ensure name is unique
-                                matName = ObjectNames.NicifyVariableName(matName);
                                 mat.name = matName;
                             }
 
@@ -223,12 +272,8 @@ namespace UnityGLTF
                                         if (string.IsNullOrEmpty(texName))
                                         {
                                             if (propertyName.StartsWith("_")) texName = propertyName.Substring(Mathf.Min(1, propertyName.Length - 1));
+                                            tex.name = texName;
                                         }
-
-                                        // Ensure name is unique
-                                        texName = string.Format("{0} {1}", sceneName, ObjectNames.NicifyVariableName(texName));
-
-                                        tex.name = texName;
                                         matTextures.Add(tex);
                                     }
 
@@ -252,7 +297,19 @@ namespace UnityGLTF
                     {
                         foreach (var tex in textures)
                         {
-                            ctx.AddObjectToAsset(GetUniqueName(tex.name), tex);
+	                        if (AssetDatabase.Contains(tex) && AssetDatabase.GetAssetPath(tex) != ctx.assetPath)
+	                        {
+#if UNITY_2020_2_OR_NEWER
+		                        ctx.DependsOnArtifact(
+#else
+		                        ctx.DependsOnSourceAsset(
+#endif
+			                        AssetDatabase.GetAssetPath(tex));
+	                        }
+	                        else
+	                        {
+		                        ctx.AddObjectToAsset(GetUniqueName(tex.name), tex);
+	                        }
                         }
                     }
 
@@ -333,6 +390,7 @@ namespace UnityGLTF
 			var importOptions = new ImportOptions
 			{
 				DataLoader = new FileLoader(Path.GetDirectoryName(projectFilePath)),
+				AnimationMethod = _importAnimations,
 			};
 			using (var stream = File.OpenRead(projectFilePath))
 			{
@@ -344,6 +402,28 @@ namespace UnityGLTF
 				loader.IsMultithreaded = true;
 
 				loader.LoadSceneAsync().Wait();
+
+				if (gLTFRoot.ExtensionsUsed != null)
+				{
+					_extensions = gLTFRoot.ExtensionsUsed
+						.Select(x => new ExtensionInfo()
+						{
+							name = x,
+							supported = true,
+							used = true,
+							required = gLTFRoot.ExtensionsRequired?.Contains(x) ?? false,
+						})
+						.ToList();
+				}
+				else
+				{
+					_extensions = new List<ExtensionInfo>();
+				}
+
+				_textures = loader.TextureCache
+					.Select(x => new TextureInfo() { texture = x.Texture, shouldBeLinear = x.IsLinear })
+					.ToList();
+
 				return loader.LastLoadedScene;
 			}
         }
