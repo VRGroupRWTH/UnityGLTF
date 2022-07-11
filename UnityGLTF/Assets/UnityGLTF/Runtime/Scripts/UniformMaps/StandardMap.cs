@@ -28,7 +28,7 @@ namespace UnityGLTF
 			s = AssetDatabase.LoadAssetAtPath<Shader>(path);
 			if(s == null)
 			{
-				s = Shader.Find(shaderName)
+				s = Shader.Find(shaderName);
 			}
 #else
 			s = Shader.Find(shaderName);

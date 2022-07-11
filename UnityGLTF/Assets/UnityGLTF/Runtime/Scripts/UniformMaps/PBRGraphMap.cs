@@ -20,7 +20,7 @@ public class PBRGraphMap : IMetalRoughUniformMap, IVolumeMap, ITransmissionMap, 
 		s = AssetDatabase.LoadAssetAtPath<Shader>(path);
 		if(s == null)
 		{
-			s = Shader.Find(shaderName)
+			s = Shader.Find(shaderName);
 		}
 #else
 		s = Shader.Find(shaderName);
