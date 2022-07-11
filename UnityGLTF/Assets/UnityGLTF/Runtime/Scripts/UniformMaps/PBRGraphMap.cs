@@ -2,6 +2,9 @@ using GLTF.Schema;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityGLTF;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class PBRGraphMap : IMetalRoughUniformMap, IVolumeMap, ITransmissionMap, IIORMap, IIridescenceMap, ISpecularMap
 {
@@ -11,7 +14,17 @@ public class PBRGraphMap : IMetalRoughUniformMap, IVolumeMap, ITransmissionMap, 
 
 	protected PBRGraphMap(string shaderName)
 	{
-		var s = Shader.Find(shaderName);
+		Shader s = null;
+#if UNITY_EDITOR
+		var path = "Packages/org.khronos.unitygltf/Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph";
+		s = AssetDatabase.LoadAssetAtPath<Shader>(path);
+		if(s == null)
+		{
+			s = Shader.Find(shaderName)
+		}
+#else
+		s = Shader.Find(shaderName);
+#endif
 		if (s == null)
 		{
 			throw new ShaderNotFoundException(shaderName + " not found. Did you forget to add it to the build?");
