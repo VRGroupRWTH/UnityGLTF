@@ -1,5 +1,9 @@
 using UnityEngine;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace UnityGLTF
 {
 	public class PBRGraphMap : BaseGraphMap, IMetalRoughUniformMap, IVolumeMap, ITransmissionMap, IIORMap, IIridescenceMap, ISpecularMap
@@ -8,6 +12,21 @@ namespace UnityGLTF
 
 		protected PBRGraphMap(string shaderName)
 		{
+#if UNITY_EDITOR
+		    const string PackagePrefix = "Packages/org.khronos.unitygltf/";
+		    var shaders = new string[] {
+			    PackagePrefix + "Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph",
+			    PackagePrefix + "Runtime/Shaders/ShaderGraph/UnlitGraph.shadergraph",
+			    PackagePrefix + "Runtime/Shaders/PbrMetallicRoughness.shader",
+			    PackagePrefix + "Runtime/Shaders/PbrSpecularGlossiness.shader",
+			    PackagePrefix + "Runtime/Shaders/Unlit.shader",
+		    };
+
+		    foreach (var shaderPath in shaders)
+		    {
+			    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+		    }
+#endif
 			var s = Shader.Find(shaderName);
 			if (s == null)
 			{

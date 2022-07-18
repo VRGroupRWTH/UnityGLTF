@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Material = UnityEngine.Material;
 using Texture = UnityEngine.Texture;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace UnityGLTF
 {
@@ -19,6 +22,21 @@ namespace UnityGLTF
 
 		protected StandardMap(string shaderName, int MaxLOD = 1000)
 		{
+#if UNITY_EDITOR
+		    const string PackagePrefix = "Packages/org.khronos.unitygltf/";
+		    var shaders = new string[] {
+			    PackagePrefix + "Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph",
+			    PackagePrefix + "Runtime/Shaders/ShaderGraph/UnlitGraph.shadergraph",
+			    PackagePrefix + "Runtime/Shaders/PbrMetallicRoughness.shader",
+			    PackagePrefix + "Runtime/Shaders/PbrSpecularGlossiness.shader",
+			    PackagePrefix + "Runtime/Shaders/Unlit.shader",
+		    };
+
+		    foreach (var shaderPath in shaders)
+		    {
+			    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+		    }
+#endif
 			var s = Shader.Find(shaderName);
 			if (s == null)
 			{
