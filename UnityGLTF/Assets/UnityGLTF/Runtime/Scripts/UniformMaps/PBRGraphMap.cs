@@ -14,7 +14,7 @@ namespace UnityGLTF
 		{
 			Shader s = null;
 #if UNITY_EDITOR
-			string path;
+			string path = "";
 			if (shaderName.Contains("PBRGraph"))
 				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph";
 			else if (path.Contains("UnlitGraph"))
