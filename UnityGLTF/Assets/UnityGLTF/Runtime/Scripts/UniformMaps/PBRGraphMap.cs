@@ -12,22 +12,28 @@ namespace UnityGLTF
 
 		protected PBRGraphMap(string shaderName)
 		{
+			Shader s = null;
 #if UNITY_EDITOR
-		    const string PackagePrefix = "Packages/org.khronos.unitygltf/";
-		    var shaders = new string[] {
-			    PackagePrefix + "Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph",
-			    PackagePrefix + "Runtime/Shaders/ShaderGraph/UnlitGraph.shadergraph",
-			    PackagePrefix + "Runtime/Shaders/PbrMetallicRoughness.shader",
-			    PackagePrefix + "Runtime/Shaders/PbrSpecularGlossiness.shader",
-			    PackagePrefix + "Runtime/Shaders/Unlit.shader",
-		    };
+			string path;
+			if (shaderName.Contains("PBRGraph"))
+				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/ShaderGraph/PBRGraph.shadergraph";
+			else if (path.Contains("UnlitGraph"))
+				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/ShaderGraph/UnlitGraph.shadergraph";
+			else if (path.Contains("PbrMetallicRoughness"))
+				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/PbrMetallicRoughness.shader";
+			else if (path.Contains("PbrSpecularGlossiness"))
+				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/PbrSpecularGlossiness.shader";
+			else if (path.Contains("Unlit"))
+				path = "Packages/org.khronos.unitygltf/Runtime/Shaders/Unlit.shader";
 
-		    foreach (var shaderPath in shaders)
-		    {
-			    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
-		    }
+			s = AssetDatabase.LoadAssetAtPath<Shader>(path);
+			if (s == null)
+			{
+				s = Shader.Find(shaderName);
+			}
+#else
+			s = Shader.Find(shaderName);
 #endif
-			var s = Shader.Find(shaderName);
 			if (s == null)
 			{
 				throw new ShaderNotFoundException(shaderName + " not found. Did you forget to add it to the build?");
