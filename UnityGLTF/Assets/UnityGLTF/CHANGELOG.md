@@ -4,6 +4,22 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.11.0-pre] - 2022-07-27
+- fix: converting PBRGraph and UnlitGraph to each other shouldn't warn
+- fix: multiple animators referencing the same clip exported animations incorrectly with KHR_animation_pointer on
+- fix: implemented partial animation target removal when some bindings animate missing objects
+- change: asset identifier for imported assets is now an explicit option
+- change: removed compilation flag to use new asset identifier, use the explicit option instead
+
+## [1.10.1-pre] - 2022-07-18
+- fix: accessor submesh primtives were incorrectly assigned after internal duplication
+- fix: don't add import dependency on shaders, load them by GUID instead
+- fix: URI-escaped file names weren't always resolved correctly
+- fix: some KHR_animation_pointer export type fixes (vec3 colors vs. vec4 colors)
+- feat: add color helpers to PBRGraphGUI
+- feat: add UnlitGraph for 2021.2+
+- feat: new API, GetPrimitivesForMesh to add extensions to exported meshes (e.g. KHR_materials_variants)
+
 ## [1.10.0-pre] - 2022-07-06
 - fix: PBRGraph assignable again from shader dropdown
 - fix: various KHR_animation_pointer fixes to extension usage and property names

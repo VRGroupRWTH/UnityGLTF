@@ -38,7 +38,7 @@ namespace UnityGLTF
 #if ENABLE_DEFAULT_GLB_IMPORTER
     [ScriptedImporter(3, new[] { "glb", "gltf" })]
 #else
-    [ScriptedImporter(3, null, overrideExts: new[] { "glb", "gltf" })]
+    [ScriptedImporter(4, null, overrideExts: new[] { "glb", "gltf" })]
 #endif
 #else
 	[ScriptedImporter(3, new[] { "glb" })]
@@ -73,6 +73,8 @@ namespace UnityGLTF
         [SerializeField] private GLTFImporterNormals _importNormals = GLTFImporterNormals.Import;
         [SerializeField] private AnimationMethod _importAnimations = AnimationMethod.Mecanim;
         [SerializeField] private bool _importMaterials = true;
+        [Tooltip("Enable this to get the same main asset identifiers as glTFast uses. This is recommended for new asset imports. Note that changing this for already imported assets will break their scene references and require manually re-adding the affected assets.")]
+        [SerializeField] private bool _useSceneNameIdentifier = false;
 
         [Serializable]
         internal class ExtensionInfo
@@ -365,18 +367,29 @@ namespace UnityGLTF
                 throw;
             }
 
-
-
 #if UNITY_2017_3_OR_NEWER
-#if !UNITYGLTF_IMPORT_IDENTIFIER_V2
-			// Set main asset
-			ctx.AddObjectToAsset("main asset", gltfScene);
-#else
-			// This will be a breaking change, but would be aligned to the import naming from glTFast - allows switching back and forth between importers.
-			ctx.AddObjectToAsset($"scenes/{gltfScene.name}", gltfScene);
-#endif
+	        // We explicitly turn the new identifier on for new imports, that is, when no meta file existed before this import.
+	        if (!_useSceneNameIdentifier)
+	        {
+		        var importer = GetAtPath(ctx.assetPath);
+		        if (importer.importSettingsMissing)
+		        {
+			        _useSceneNameIdentifier = true;
+		        }
+	        }
 
-			// Add meshes
+	        if (!_useSceneNameIdentifier)
+	        {
+		        // Set main asset
+		        ctx.AddObjectToAsset("main asset", gltfScene);
+	        }
+	        else
+	        {
+		        // This will be a breaking change, but would be aligned to the import naming from glTFast - allows switching back and forth between importers.
+		        ctx.AddObjectToAsset($"scenes/{gltfScene.name}", gltfScene);
+	        }
+
+	        // Add meshes
 			foreach (var mesh in meshes)
 			{
 				try
